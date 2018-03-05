@@ -1,0 +1,370 @@
+/*******************************************************************
+File name   			:	emib.v
+Function    			:	1.joins sub modules  together;
+								2.provides pins connect with external module;
+ 
+Version maintenance	:	zourenbo
+Version     			:	V1.0
+data        			:	2010-12-13
+*******************************************************************/
+
+/***************************   modify record   *********************
+
+**************************************************************************
+**************************************************************************/
+
+`include "../master_rtl/emib/emib_DEF.v"
+module  emib(
+		input  wire i_clk,
+		input  wire i_rst_n,
+//		input  wire [15:0]  sappid,
+//		input  wire [15:0]  dappid,
+
+/***************MM signals*************************/	
+		input  wire [15:0]  dobjid,
+		input  wire [15:0]  subidx,
+		input  wire i_rd_en,
+		input  wire i_wr_en,
+		input  wire [15:0]  i_mm_data,
+		output wire [`ADDR_SZ-1:0]  base_addr,
+		output wire [15:0] o_mm_data,
+		input wire i_rd_rsp_en,
+		output wire o_write_done,
+		output wire o_read_done,
+		output wire o_write_error,
+		output wire o_read_error,
+		output wire [`ADDR_SZ-1:0] o_mm_data_len,
+//		input  wire [1:0] i_work_state,			
+
+
+/***************flash interface signals*************************/		
+		input wire  [`ADDR_SZ-1:0] i_flash_raddr,
+		output wire  o_flash_rd_irq,
+		input wire   i_flash_rd_en,
+		output wire  [15:0] o_flash_data,
+		
+		input wire [`ADDR_SZ-1:0] i_flash_waddr,
+		input wire [15:0] i_flash_data,	
+		input wire i_flash_wr_en,
+		output wire o_flash_wr_irq,
+		input wire i_read_flash_done,
+		output wire [`ADDR_SZ-1:0] o_flash_addr_offset,
+		output wire [`ADDR_SZ-1:0] o_flash_data_len,
+/***************frt interface signals*************************/				
+		input wire [31:0] i_frt_ip,
+		output wire [15:0] o_frt_type,
+		input wire [15:0] i_frt_service_role,	
+		
+		output wire [15:0] o_frt_offset_len,
+		output wire [15:0] o_frt_data_offset,
+
+		input wire i_frt_index_irq,
+		
+		output wire o_frt_index_done,
+	
+/***************commen_data signals*************************/	
+      output wire [47:0] o_local_mac,
+		output wire [15:0] o_frt0_data_len,	
+		output wire [31:0] o_local_node_ip,
+		output wire [31:0] o_first_ip_mask,		
+		output wire [31:0] o_second_ip_mask,	
+		output wire [31:0] o_macro_cycle_time,
+		output wire [31:0] o_real_cycle_time,
+		output wire [31:0] o_frt_send_time,	
+		output wire [15:0]o_ptp_num,
+		output wire o_commen_data_rd_done
+					
+);
+
+
+/******************test**************************/
+
+
+
+
+
+/******************end**************************/
+
+wire [`ADDR_SZ-1:0] offset_addr;
+wire [`ADDR_SZ-1:0] offset_len ;
+
+wire [`ADDR_SZ-1:0]  add_addr_write,add_addr_read;
+
+wire [3:0] subid_num ;
+wire error;
+
+/******** emib_ram  signals *********/
+wire  ram_rd_en,ram_wr_en ;
+wire [15:0] ram_data_in,ram_data_out;
+wire  [`ADDR_SZ-1:0] wr_ram_addr,rd_ram_addr ;
+/*************** end **************/
+
+wire [`ADDR_SZ-1:0] emib_wr_address,emib_rd_address,frt_emib_addr ,commen_emib_addr;
+wire [15:0] emib_wr_data,emib_rd_data,frt_emib_data ,commen_data;
+
+wire  frt_rd_ram_en ,rd_en,wr_en,commen_rd_en ;
+
+reg output_flag,output_flag_reg;
+
+wire [15:0] device_state;
+assign emib_wr_address = base_addr+offset_addr+add_addr_write ;
+
+assign emib_rd_address = base_addr+offset_addr+add_addr_read ;
+
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+		output_flag <= 1'b0;
+	end
+	else if((dobjid == 16'h2)&&(subidx == 16'he))
+	begin
+		output_flag <= 1'b1;
+	end
+	else 
+	begin
+		output_flag <= 1'b0;
+	end
+end
+//
+//always @(posedge i_clk or negedge i_rst_n)
+//begin
+//	if(!i_rst_n)
+//	begin
+//		output_flag_reg <= 1'b0;
+//	end
+//	else 
+//	begin
+//		output_flag_reg <= output_flag;
+//	end
+//end	
+
+
+
+/***********emib ram*********/
+emib_ram mem(
+//	.aclr(i_rst_n),
+	.clock(i_clk),
+	.data(ram_data_in),
+	.rdaddress(rd_ram_addr),
+	.rden(ram_rd_en),
+	.wraddress(wr_ram_addr),
+	.wren(ram_wr_en),
+	.q(ram_data_out)
+	);
+/**************end*************/
+
+
+
+/************od module**************/
+od      od1(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		.i_dobjid(dobjid),
+		.i_subidx(subidx),
+		.o_base_addr(base_addr),
+		.o_offset_addr(offset_addr),
+		.o_offset_len(offset_len),
+		.o_error(error)
+);
+/**************end*************/
+
+
+/************write emib module**************/
+write_emib  write_emib1(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		.i_wr_en(i_wr_en),
+		.i_error(error),
+		.i_mm_to_emib_data(i_mm_data),
+		.i_mm_data_len(offset_len),
+		.o_emib_data(emib_wr_data),
+		.o_emib_addr(add_addr_write),
+		.o_wr_en(wr_en),
+		.o_write_error(o_write_error),
+		.o_write_done(o_write_done)
+);
+/**************end*************/
+
+/************read emib module**************/
+read_emib  read_emib1(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		.i_rd_en(i_rd_en),
+		.i_error(error),
+		.i_emib_to_mm_data(emib_rd_data),
+		.i_mm_data_len(offset_len),
+		.o_mm_data(o_mm_data),
+		.o_mm_addr(add_addr_read),
+		.i_rd_rsp_en(i_rd_rsp_en),
+		.o_rd_en(rd_en),
+		.o_read_error(o_read_error),
+		.o_read_done(o_read_done),
+		.o_mm_data_len(o_mm_data_len)
+);
+/**************end*************/
+
+/************frt link object index module**************/
+frt_link_index		frt_link_index1(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),		
+		.i_frt_ip(i_frt_ip),
+		.o_frt_type(o_frt_type),
+		.i_frt_service_role(i_frt_service_role),		
+		.o_frt_offset_len(o_frt_offset_len),
+		.o_frt_data_offset(o_frt_data_offset),				
+		.i_frt_index_irq(i_frt_index_irq),		
+		.o_frt_index_done(o_frt_index_done),		
+		.o_emib_addr(frt_emib_addr),		
+		.o_rd_ram_en(frt_rd_ram_en),		
+		.i_emib_data(frt_emib_data)	
+); 
+/**************end*************/
+
+/************commen data output  module**************/
+commen_data  commen_data1(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),	
+		
+		.i_read_flash_done(i_read_flash_done),
+
+		.o_emib_addr(commen_emib_addr),		
+		.o_rd_ram_en(commen_rd_en),		
+		.i_emib_data(commen_data),
+		
+		.o_local_mac(o_local_mac),
+		.o_frt0_data_len(o_frt0_data_len),		
+		.o_local_node_ip(o_local_node_ip),
+		.o_first_ip_mask(o_first_ip_mask),
+		.o_second_ip_mask(o_second_ip_mask),
+		.o_macro_cycle_time(o_macro_cycle_time),
+		.o_real_cycle_time(o_real_cycle_time),
+		.o_frt_send_time(o_frt_send_time),		
+		.o_ptp_num(o_ptp_num),
+		.o_device_state(device_state),
+		.o_commen_data_rd_done(o_commen_data_rd_done)
+);
+/**************end*************/
+
+ 
+ /************flash interface   module**************/
+ emib_flash_interface flash_trig(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		
+		.i_device_state(o_write_done && output_flag),
+				
+		.o_flash_rd_irq(o_flash_rd_irq),
+		.i_flash_rd_en(i_flash_rd_en),	
+
+		.i_flash_wr_en(i_flash_wr_en),
+		.o_flash_wr_irq(o_flash_wr_irq),
+
+		.i_write_done(o_write_done),
+		.i_read_flash_done(i_read_flash_done),
+		
+		.i_emib_wr_address(emib_wr_address),
+		.i_offset_len(offset_len),
+		
+		.o_flash_addr_offset(o_flash_addr_offset),
+		.o_flash_data_len(o_flash_data_len) 
+
+);
+/**************end*************/ 
+ 
+  /************bus  select   module**************/
+  bus_select bus_select1(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),	
+		
+		.i_frt_rd_ram_en(frt_rd_ram_en),
+		.i_frt_emib_addr_out(frt_emib_addr),
+		.o_frt_emib_data(frt_emib_data),		
+		
+		.i_rd_en_out(rd_en),		
+		.i_emib_rd_address(emib_rd_address),
+		.o_emib_rd_data(emib_rd_data),
+
+		
+		.i_wr_en_out(wr_en),
+		.i_emib_wr_address(emib_wr_address),
+		.i_emib_wr_data(emib_wr_data),
+
+		.i_flash_raddr(i_flash_raddr),
+		.i_flash_rd_en(i_flash_rd_en),
+		.o_flash_data(o_flash_data),
+		
+		.i_flash_waddr(i_flash_waddr),
+		.i_flash_data(i_flash_data),	
+		.i_flash_wr_en(i_flash_wr_en),
+		
+		.i_commen_rd_en_out(commen_rd_en),
+		.i_commen_emib_addr_out(commen_emib_addr),
+		.o_commen_data(commen_data),
+		
+		.o_rd_ram_addr(rd_ram_addr),
+ 		.o_wr_ram_addr(wr_ram_addr),
+		.i_ram_data_out(ram_data_out),
+		.o_ram_data(ram_data_in),	
+		.o_rd_en(ram_rd_en),
+		.o_wr_en(ram_wr_en)
+);
+ /**************end*************/ 
+ 
+// emib(
+//		.i_clk(i_clk),
+//		.i_rst_n(i_rst_n),
+//
+///***************MM signals*************************/	
+//		.dobjid(dobjid),
+//		.subidx(subidx),
+//		.i_rd_en(),
+//		.i_wr_en(),
+//		.i_mm_data(),
+//		.base_addr(base_addr),
+//		.o_mm_data(),
+//		.o_write_done(),
+//		.o_read_done(),
+//		.o_write_error(),
+//		.o_read_error(),
+//		.i_work_state(),			
+//
+//
+///***************flash interface signals*************************/		
+//		.i_flash_raddr(),
+//		.o_flash_rd_irq(),
+//		.i_flash_rd_en(),
+//		.o_flash_data(),
+//		
+//		.i_flash_waddr(),
+//		.i_flash_data(),	
+//		.i_flash_wr_en(),
+//		.o_flash_wr_irq(),
+///***************frt interface signals*************************/				
+//		.i_frt_ip(),
+//		.i_frt_type(),
+//		.i_frt_service_role(),	
+//		
+//		.o_frt_offset_len(),
+//		.o_frt_data_offset(),
+//
+//		.i_frt_index_irq(),
+//		
+//		.o_frt_index_done(),
+//	
+///***************commen_data signals*************************/	
+//		.o_frt0_data_len(),	
+//		.o_local_node_ip(),
+//		.o_first_ip_mask(),		
+//		.o_second_ip_mask(),	
+//		.o_macro_cycle_time(),
+//		.o_real_cycle_time(),
+//		.o_frt_send_time(),	
+//		.o_ptp_num()		
+//			
+//		
+//); 
+
+
+endmodule

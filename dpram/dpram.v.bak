@@ -1,0 +1,365 @@
+
+/*******************************************************************
+File name   			:	dpram.v
+Function    			:	store the data from controller and fpga;
+ 
+Version maintenance	:	caogang
+Version     			:	V1.0
+data        			:	2011-02-13
+*******************************************************************/
+
+/***************************   modify record   *********************
+
+**************************************************************************
+**************************************************************************/
+module  dpram(
+			input wire i_clk_fpga,
+			input wire i_rst_n,
+			// input wire i_clk_cpu,
+			//basic info
+			output reg o_dpram_valid,
+			output reg o_work_rdt,
+			output reg [7:0]o_slaver_num,
+			output reg [31:0]o_MacroCycle_time,
+			output reg [31:0]o_RealCycle_time,
+			output reg [31:0]o_Sendtime_offset,
+			//cpu
+			input wire [11:0]i_addr_cpu,
+			inout wire [15:0]b_data_cpu,
+			input wire i_rd_wr_cpu,
+			input wire i_oe_cpu,
+			input wire i_cpu_cs,//low active
+ 			output reg o_busy_cpu,//low active
+			//
+			input wire	[11:0]i_addr_frt,
+			input wire  [15:0]i_data_frt,
+			input wire i_rd_en_frt,
+			input wire i_wr_en_frt,
+			output reg o_busy_fpga,
+			//frt 
+			input wire i_dpram_index_irq,
+			output reg o_dpram_index_dn,
+			input wire [31:0]i_dpram_ip,
+			output reg [15:0]o_frt_offset_len,
+			output reg [15:0]o_frt_offset_data,
+			//redundant
+			input wire i_m_to_r,
+			input wire i_r_to_m,
+			//mm
+			input wire i_mm_rd_dpram_en,
+			input wire [11:0]i_mm_rd_dpram_addr,
+			output wire [15:0]o_data_dpram,
+			//flash interface
+			output reg [15:0]o_flash_ip,
+			output reg o_master_ip_wrirq,
+			output wire [9:0]o_masterip_offsetaddr,
+			output wire [9:0]o_masterip_len,
+			input wire i_flash_rd_en
+
+);	
+
+
+wire [15:0]data_cpu;
+reg  [11:0]addr_fpga;
+
+reg [11:0]link_rd_dpram_addr;
+reg link_rd_dpram_en;
+reg [31:0]link_dpram_ip;
+reg [2:0]cnt/*synthesis preserve*/;
+wire rd_en_fpga;
+reg dpram_valid_dly;
+reg [31:0]master_ip;
+reg cntip;
+
+assign b_data_cpu = (!i_cpu_cs &&i_rd_wr_cpu)? ((i_addr_cpu == 12'h001 )?o_work_rdt:data_cpu):16'hz;
+
+
+
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    o_dpram_valid <= 1'b0;
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h000) )
+	    o_dpram_valid <= b_data_cpu[0];	
+	else
+		o_dpram_valid <= o_dpram_valid;
+end
+
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    dpram_valid_dly <= 1'b0;
+	else
+		 dpram_valid_dly <= o_dpram_valid;
+end
+reg [3:0]cntb/*synthesis noprune*/;
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    begin
+			o_work_rdt <= 1'b0;
+			cntb <= 4'h0;
+		end
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h001) )
+	    begin
+			o_work_rdt <= b_data_cpu[0];	
+			cntb <= cntb + 1'b1;
+		end
+	else if(i_m_to_r)
+		begin
+			o_work_rdt <= 1'b0;
+		end
+	else if(i_r_to_m)
+		o_work_rdt <= 1'b1;
+	else
+		begin
+			o_work_rdt <= o_work_rdt;
+			cntb <= cntb ;
+		end
+end
+
+reg [3:0]cnta/*synthesis noprune*/;
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    begin
+		o_slaver_num <= 8'h10;
+		cnta <= 4'h0;
+		end
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h002) )
+	    begin
+		o_slaver_num <= b_data_cpu[7:0];	
+		cnta <= cnta + 1'b1;
+		end
+	else
+		begin
+		o_slaver_num <= o_slaver_num;
+		cnta <= cnta;
+		end
+end
+//ip of master device,
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    master_ip <= 32'hc0a80001;
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h010) )
+	    master_ip[31:16] <= b_data_cpu;	
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h011) )
+	    master_ip[15:0] <= b_data_cpu;
+	else
+		 master_ip <= master_ip;
+end
+
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+   if (!i_rst_n)
+	begin
+		o_master_ip_wrirq <= 1'b0;
+		o_flash_ip <= 16'h0;
+		cntip <= 1'b0;
+	end
+	else if(!dpram_valid_dly && o_dpram_valid)
+	begin
+		o_master_ip_wrirq <= 1'b1;	
+		o_flash_ip <= 16'h0;
+		cntip <= 1'b0;
+	end
+	else if (i_flash_rd_en)
+	begin
+		cntip <= ~cntip ;
+		o_master_ip_wrirq <= 1'b0;
+		if(!cntip)
+			o_flash_ip <= master_ip[31:16];
+		else
+			o_flash_ip <= master_ip[15:0];
+	end
+end
+
+
+
+assign o_masterip_offsetaddr = 10'h26;
+assign o_masterip_len = 10'h2;
+
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    o_MacroCycle_time <= 32'hf4240;
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h012) )
+	    o_MacroCycle_time[31:16] <= b_data_cpu;	
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h013) )
+	    o_MacroCycle_time[15:0] <= b_data_cpu;
+	else
+		o_MacroCycle_time <= o_MacroCycle_time;
+end
+
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    o_RealCycle_time <= 32'hc3500;
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h014) )
+	    o_RealCycle_time[31:16] <= b_data_cpu;	
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h015) )
+	    o_RealCycle_time[15:0] <= b_data_cpu;
+	else
+		o_RealCycle_time <= o_RealCycle_time;
+end
+
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    o_Sendtime_offset <= 32'h03e8;
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h016) )
+	    o_Sendtime_offset[31:16] <= b_data_cpu;	
+	else if(!i_cpu_cs  && !i_rd_wr_cpu && (i_addr_cpu == 12'h017) )
+	    o_Sendtime_offset[15:0] <= b_data_cpu;
+	else
+		o_Sendtime_offset <= o_Sendtime_offset;
+end
+
+
+
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    o_busy_cpu <= 1'b1;
+	else if(!i_cpu_cs  && i_rd_wr_cpu && (i_addr_cpu == addr_fpga) && i_wr_en_frt )
+	    o_busy_cpu <= 1'b0;	
+	else
+		o_busy_cpu <= 1'b1;
+end
+
+
+always @ (posedge i_clk_fpga or negedge i_rst_n)
+begin
+    if (!i_rst_n)
+	    o_busy_fpga <= 1'b0;
+	else if(rd_en_fpga && (i_addr_cpu == addr_fpga) && !i_rd_wr_cpu )
+	    o_busy_fpga <= 1'b1;	
+	else
+		o_busy_fpga <= 1'b0;
+end
+
+
+always @(posedge i_clk_fpga or negedge i_rst_n )
+begin
+	if(!i_rst_n)
+		begin
+		o_dpram_index_dn <= 1'b0;
+		o_frt_offset_len <= 16'h0;
+		o_frt_offset_data <= 16'h0;
+		link_rd_dpram_addr <= 12'h0;
+		link_rd_dpram_en <= 1'b0;
+		link_dpram_ip <= 32'h0000;
+		cnt <= 3'b000;
+		end
+	else if(i_dpram_index_irq)
+		begin
+		if(link_rd_dpram_addr >= 12'h200)
+			o_dpram_index_dn <= 1'b1;
+		else if(cnt == 3'b000)
+			begin
+			link_rd_dpram_en <= 1'b1;
+			link_rd_dpram_addr <= 12'h020;
+			cnt <= 3'b001;
+			end
+		else if(cnt == 3'b001)
+			begin
+			link_rd_dpram_addr <= link_rd_dpram_addr + 1'b1;
+			link_dpram_ip[15:0] <= o_data_dpram;
+			cnt <= 3'b010;
+			end
+			
+		else if(cnt == 3'b010)
+			begin
+			if(link_dpram_ip == i_dpram_ip)
+				begin
+				link_rd_dpram_addr <= link_rd_dpram_addr - 12'h7;
+				cnt <= 3'b011; 
+				end
+			else
+				begin
+				link_rd_dpram_addr <= link_rd_dpram_addr + 12'hf;
+				link_dpram_ip[31:16] <= o_data_dpram;
+				cnt <= 3'b001;
+				end
+			end
+		else if(cnt == 3'b011)
+			begin
+			link_rd_dpram_addr <= link_rd_dpram_addr + 1'b1;
+			cnt <= 3'b100;
+			end
+			
+		else if(cnt == 3'b100)
+			begin
+			o_frt_offset_data <= o_data_dpram;
+			cnt <= 3'b101;
+			end
+			
+		else if(cnt == 3'b101)
+			begin
+			link_rd_dpram_en <= 1'b0;
+			o_frt_offset_len <= o_data_dpram;
+			o_dpram_index_dn <= 1'b1;
+			end
+		end
+	else
+		begin
+		o_dpram_index_dn <= 1'b0;
+		o_frt_offset_len <= 16'h0;
+		o_frt_offset_data <= 16'h0;
+		link_rd_dpram_addr <= 12'h0;
+		link_rd_dpram_en <= 1'b0;
+		link_dpram_ip <= 32'h0000;
+		cnt <= 3'b000;	
+		end
+
+end
+
+
+always @(*)
+begin
+	if(!i_rst_n)
+		addr_fpga = 12'h0;
+	else if(link_rd_dpram_en)
+		addr_fpga = link_rd_dpram_addr;
+	else if(i_mm_rd_dpram_en)
+		addr_fpga = i_mm_rd_dpram_addr;
+	else if(i_rd_en_frt || i_wr_en_frt)
+		addr_fpga = i_addr_frt;
+	else
+		addr_fpga = 12'h0;
+end
+
+//test
+
+reg test/*synthesis noprune*/;
+always @(posedge i_clk_fpga or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+		test <= 1'b0;
+	else if(i_wr_en_frt && (addr_fpga>= 12'he00 || addr_fpga <= 12'h800 ) )
+		test <= 1'b1;
+	else
+		test <= 1'b0;
+end
+
+
+
+assign rd_en_fpga = link_rd_dpram_en || i_rd_en_frt || i_mm_rd_dpram_en;
+
+	dp_ram  dp_ram(	
+	.address_a(addr_fpga),
+	.address_b(i_addr_cpu),
+	.clock_a(i_clk_fpga),
+	.clock_b(i_clk_fpga),
+	.data_a(i_data_frt),
+	.data_b(b_data_cpu),
+	.rden_a(rd_en_fpga),
+	.rden_b(i_rd_wr_cpu && !i_oe_cpu),
+	.wren_a(i_wr_en_frt),
+	.wren_b(!i_rd_wr_cpu),
+	.q_a(o_data_dpram),
+	.q_b(data_cpu)
+	);
+	
+	endmodule

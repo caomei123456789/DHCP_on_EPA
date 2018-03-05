@@ -1,0 +1,237 @@
+
+/*******************************************************************
+File name   			:	bus_convert.v
+Function    			:	send select;
+ 
+Version maintenance	:	caogang
+Version     			:	V1.0
+data        			:	2011-02-13
+*******************************************************************/
+
+/***************************   modify record   *********************
+
+**************************************************************************
+**************************************************************************/
+module  bus_convert(
+			input wire i_clk,
+			input wire i_rst_n,
+			//frt
+			input wire	i_frt_irq,
+			input wire [9:0] i_frt_len,
+			output wire o_frt_nxt_pkg,
+			input wire [15:0]i_frt_data,
+			output reg o_frt_rd_en,
+			output reg [9:0]o_frt_rd_addr,
+			input wire [2:0]i_frt_port_select,
+			//ptp
+			input wire	i_ptp_irq,
+			input wire [9:0] i_ptp_len,
+			output wire o_ptp_nxt_pkg,
+			input wire [15:0]i_ptp_data,
+			output reg o_ptp_rd_en,
+			output reg [9:0]o_ptp_rd_addr,
+			input wire [2:0]i_ptp_port_select,
+			//mm
+			input wire	i_mm_irq,
+			input wire [9:0] i_mm_len,
+			output wire o_mm_nxt_pkg,
+			input wire [15:0]i_mm_data,
+			output reg o_mm_rd_en,
+			output reg [9:0]o_mm_rd_addr,
+			input wire [2:0]i_mm_port_select,			
+			//arp
+			input wire	i_arp_irq,
+			input wire [9:0] i_arp_len,
+			output wire o_arp_nxt_pkg,
+			input wire [15:0]i_arp_data,
+			output reg o_arp_rd_en,
+			output reg [9:0]o_arp_rd_addr,
+			input wire [2:0]i_arp_port_select,
+			//mac
+			output reg o_mac_irq,
+			output reg [9:0]o_mac_len,
+			input wire i_mac_nxt_pkg,
+			output reg [15:0]o_mac_data,
+			input wire i_mac_rd_en,
+			input wire [9:0]i_mac_rd_addr,
+			output reg [2:0] o_mac_port_select
+					
+					);
+					
+					
+reg sending_frt;
+reg sending_mm;
+reg sending_arp;
+reg sending_ptp;
+					
+assign o_frt_nxt_pkg = i_mac_nxt_pkg;
+assign o_ptp_nxt_pkg = i_mac_nxt_pkg;
+assign o_arp_nxt_pkg = i_mac_nxt_pkg;
+assign o_mm_nxt_pkg  = i_mac_nxt_pkg;
+
+					
+					
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+		sending_frt <= 1'b0;
+		sending_ptp <= 1'b0;
+		sending_mm  <= 1'b0;
+		sending_arp <= 1'b0;
+	end	
+	else if(i_frt_irq)
+	begin
+		sending_frt <= 1'b1;
+	end
+	else if(i_ptp_irq)
+	begin
+		sending_ptp <= 1'b1;
+	end	
+	else if(i_mm_irq)
+	begin
+		sending_mm <= 1'b1;
+	end	
+	else if(i_arp_irq)
+	begin
+		sending_arp <= 1'b1;
+	end
+	else if(i_mac_nxt_pkg)
+	begin
+		sending_frt <= 1'b0;
+		sending_ptp <= 1'b0;
+		sending_mm  <= 1'b0;
+		sending_arp <= 1'b0;
+	end	
+end
+
+					
+always @(*)
+begin
+	if(!i_rst_n)
+		begin
+			o_mac_irq = 1'b0;
+			o_mac_len = 10'h0;
+			o_mac_data = 16'h0;
+			o_mac_port_select = 3'b0;
+			o_frt_rd_en = 1'b0; 
+			o_frt_rd_addr = 10'h0;
+			o_ptp_rd_en = 1'b0;
+			o_ptp_rd_addr = 10'h0;
+			o_mm_rd_en = 1'b0;
+			o_mm_rd_addr = 10'h0;
+			o_arp_rd_en = 1'b0;
+			o_arp_rd_addr = 10'h0;
+		end
+	else if(sending_frt)
+		begin
+			o_mac_irq = i_frt_irq;
+			o_mac_len = i_frt_len;
+			o_mac_data = i_frt_data;
+			o_mac_port_select = i_frt_port_select;
+			o_frt_rd_en = i_mac_rd_en;
+			o_frt_rd_addr = i_mac_rd_addr;
+			o_ptp_rd_en = 1'b0;
+			o_ptp_rd_addr = 10'h0;
+			o_mm_rd_en = 1'b0;
+			o_mm_rd_addr = 10'h0;
+			o_arp_rd_en = 1'b0;
+			o_arp_rd_addr = 10'h0;
+		end
+	else if(sending_ptp)
+		begin
+			o_mac_irq = i_ptp_irq;
+			o_mac_len = i_ptp_len;
+			o_mac_data = i_ptp_data;
+			o_mac_port_select = i_ptp_port_select;
+			o_ptp_rd_en = i_mac_rd_en;
+			o_ptp_rd_addr = i_mac_rd_addr	;
+			o_frt_rd_en = 1'b0; 			
+			o_frt_rd_addr = 10'h0;
+			o_ptp_rd_en = 1'b0;
+			o_mm_rd_en = 1'b0;
+			o_mm_rd_addr = 10'h0;
+			o_arp_rd_en = 1'b0;
+			o_arp_rd_addr = 10'h0;
+		end
+	else if(sending_mm)
+		begin
+			o_mac_irq = i_mm_irq;
+			o_mac_len = i_mm_len;
+			o_mac_data = i_mm_data;
+			o_mac_port_select = i_mm_port_select;
+			o_mm_rd_en = i_mac_rd_en;
+			o_mm_rd_addr = i_mac_rd_addr;
+			o_frt_rd_en = 1'b0; 
+			o_frt_rd_addr = 10'h0;
+			o_ptp_rd_en = 1'b0;
+			o_ptp_rd_addr = 10'h0;
+			o_arp_rd_en = 1'b0;
+			o_arp_rd_addr = 10'h0;	
+		end
+	else if(sending_arp)
+		begin
+			o_mac_irq = i_arp_irq;
+			o_mac_len = i_arp_len;
+			o_mac_data = i_arp_data;
+			o_mac_port_select = i_arp_port_select;
+			o_arp_rd_en = i_mac_rd_en;
+			o_arp_rd_addr = i_mac_rd_addr;
+			o_frt_rd_en = 1'b0; 
+			o_frt_rd_addr = 10'h0;
+			o_ptp_rd_en = 1'b0;
+			o_ptp_rd_addr = 10'h0;
+			o_mm_rd_en = 1'b0;
+			o_mm_rd_addr = 10'h0;
+		end
+	else 
+		begin
+			o_mac_irq = 1'b0;
+			o_mac_len = 10'h0;
+			o_mac_data = 16'h0;
+			o_mac_port_select = 3'b0;
+			o_frt_rd_en = 1'b0; 
+			o_frt_rd_addr = 10'h0;
+			o_ptp_rd_en = 1'b0;
+			o_ptp_rd_addr = 10'h0;
+			o_mm_rd_en = 1'b0;
+			o_mm_rd_addr = 10'h0;
+			o_arp_rd_en = 1'b0;
+			o_arp_rd_addr = 10'h0;
+			o_evt_rd_en = 1'b0;
+			o_evt_rd_addr = 10'h0;
+		end
+		
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+endmodule

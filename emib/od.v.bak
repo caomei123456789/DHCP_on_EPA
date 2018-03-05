@@ -1,0 +1,716 @@
+
+/*******************************************************************
+File name   			:	od.v
+Function    			:	1.output base  address and offset address of data access to objid and subidx
+ 
+Version maintenance	:	zourenbo
+Version     			:	V1.0
+data        			:	2010-12-13
+*******************************************************************/
+
+/***************************   modify record   *********************
+
+**************************************************************************
+**************************************************************************/
+`include "../master_rtl/emib/emib_DEF.v"
+module  od 
+		(
+		input  i_clk,
+		input  i_rst_n,
+		input  [15:0]  i_dobjid,
+		input  [15:0]  i_subidx,
+		output reg [`ADDR_SZ-1:0]  o_base_addr,
+		output reg [`ADDR_SZ-1:0]  o_offset_addr,
+		output reg [`ADDR_SZ-1:0] o_offset_len,
+		output reg o_error
+//		output reg [3:0] subid_num
+);
+
+
+reg [`ADDR_SZ-1:0] base_addr_fix;
+reg [`ADDR_SZ-1:0] base_addr_appobj;
+reg [`ADDR_SZ-1:0] base_addr_linkobj;
+
+wire [15:0] base_addr_linkobj_temp;
+
+
+reg [`ADDR_SZ-1:0] offset_addr1,offset_addr2,offset_addr3,offset_addr4,offset_addr5,offset_addr6,offset_addr9,offset_addr10 ;
+
+reg [`ADDR_SZ-1:0] o_offset_len1,o_offset_len2,o_offset_len3,o_offset_len4,o_offset_len5,o_offset_len6,o_offset_len9,o_offset_len10;
+
+parameter EMIB_Header = 16'h1;
+parameter EPA_Device_Decriptor = 16'h2;
+parameter Clock_Sync = 16'h3;
+parameter Max_RSP_TIme = 16'h4;
+parameter Commulation_Sche_Management = 16'h5;
+parameter Device_App_Info = 16'h6;
+parameter FB_App_info_Header = 16'h7;
+parameter Link_Object_Header = 16'h8;
+parameter Domain_Application_Obj_Header = 16'h9;
+parameter FRT_Link_obj_Header = 16'h0a;
+
+
+/*************calculator the base address**************************/
+ 
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+		base_addr_fix <= `ADDR_SZ'h03ff;
+//		subid_num <= 4'h0;
+	end
+	else
+	case(i_dobjid)
+	EMIB_Header:
+		begin
+		base_addr_fix <= `ADDR_SZ'd0000;
+//		subid_num <= 4'd2;
+		end
+	EPA_Device_Decriptor:
+		begin
+		base_addr_fix <= `ADDR_SZ'd002;
+//		subid_num <= 4'd15;	
+		end
+	Clock_Sync:
+		begin
+		base_addr_fix <= `ADDR_SZ'd054;
+//		subid_num <= 4'd10;
+		end	
+	Max_RSP_TIme:
+		begin
+		base_addr_fix <= `ADDR_SZ'd75;
+//		subid_num <= 4'd3;
+		end	
+	Commulation_Sche_Management:
+		begin
+		base_addr_fix <= `ADDR_SZ'd079;	
+//		subid_num <= 4'd7;
+		end
+	Device_App_Info:
+		begin
+		base_addr_fix <= `ADDR_SZ'd089;
+//		subid_num <= 4'd2;
+		end	
+	FB_App_info_Header:
+		begin
+		base_addr_fix <= `ADDR_SZ'd091;
+//		subid_num <= 4'd5;
+		end	
+	Link_Object_Header:
+		begin
+		base_addr_fix <= `ADDR_SZ'd096;	
+//		subid_num <= 4'h6;
+		end
+	Domain_Application_Obj_Header:
+		begin
+		base_addr_fix <= `ADDR_SZ'd0103;
+//		subid_num <= 4'h5;
+		end	
+	FRT_Link_obj_Header:
+		begin
+		base_addr_fix <= `ADDR_SZ'd0108;
+//		subid_num <= 4'h5;
+		end	
+	default:
+		begin
+		base_addr_fix <= `ADDR_SZ'h03ff;	
+//		subid_num <= 4'h0;
+		end	
+	endcase
+end
+
+//assign  base_addr_linkobj_temp = (i_dobjid-16'd6000)<<2'h3+(i_dobjid-16'd6000)<<2'h1;
+assign  base_addr_linkobj_temp = (i_dobjid-16'd6000)*4'd10;
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	base_addr_linkobj <= `ADDR_SZ'd0000;
+	end
+	else if(i_dobjid >= 16'd6000)
+	begin
+	base_addr_linkobj <= base_addr_linkobj_temp[`ADDR_SZ-1:0] + `ADDR_SZ'd500;
+//	base_addr_linkobj <= ((i_dobjid-16'd6000)*4'd10) + `ADDR_SZ'd500;	
+	end
+	else
+	begin
+	base_addr_linkobj <= `ADDR_SZ'h03ff ;
+	end	
+end
+
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	o_base_addr <= `ADDR_SZ'h0;	
+	else 
+	o_base_addr <= base_addr_fix & base_addr_linkobj;
+end
+
+
+/*****************************end************************************/
+
+/*************calculator the offset address**************************/
+
+
+/*************calculator the EMIB_Header offset address**************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	offset_addr1 <= `ADDR_SZ'd0000;
+	o_offset_len1 <= `ADDR_SZ'h00;
+	end
+	else if(i_dobjid == EMIB_Header)
+	begin
+	case(i_subidx)
+	16'h0:
+		begin
+		offset_addr1 <= `ADDR_SZ'd0000;
+		o_offset_len1 <= `ADDR_SZ'd2;		
+		end
+	16'h1:  
+		begin
+		offset_addr1 <= `ADDR_SZ'd0000;
+		o_offset_len1 <= `ADDR_SZ'd1;
+		end
+	16'h2:	
+		begin
+		offset_addr1 <= `ADDR_SZ'd0001;
+		o_offset_len1 <= `ADDR_SZ'd1;	
+		end
+	default:
+		begin
+		offset_addr1 <= `ADDR_SZ'h03ff;
+		o_offset_len1 <= `ADDR_SZ'd0;
+		end
+	endcase
+	end
+	else
+	begin
+		offset_addr1 <= `ADDR_SZ'd0000;
+		o_offset_len1 <= `ADDR_SZ'd0;	
+	end
+end
+
+/*****************************end************************************/
+
+/*************calculator the EPA_Device_Decriptor offset address**************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	offset_addr2 <= `ADDR_SZ'd0000;
+	o_offset_len2 <= `ADDR_SZ'h00;
+	end
+	else if(i_dobjid == EPA_Device_Decriptor)
+	begin
+	case(i_subidx)
+	16'h0:
+		begin
+		offset_addr2 <= `ADDR_SZ'd0000;
+		o_offset_len2 <= `ADDR_SZ'd52;		
+		end
+	16'h1:  
+		begin
+		offset_addr2 <= `ADDR_SZ'd0000;
+		o_offset_len2 <= `ADDR_SZ'd1;
+		end
+	16'h2:	
+		begin
+		offset_addr2 <= `ADDR_SZ'd0001;
+		o_offset_len2 <= `ADDR_SZ'd1;
+		end	
+	16'h3:  
+		begin
+		offset_addr2 <= `ADDR_SZ'd0002;
+		o_offset_len2 <= `ADDR_SZ'd16;
+		end
+	16'h4:	
+		begin
+		offset_addr2 <= `ADDR_SZ'd0018;
+		o_offset_len2 <= `ADDR_SZ'd16;
+		end	
+	16'h5:  
+		begin
+		offset_addr2 <= `ADDR_SZ'd0034;
+		o_offset_len2 <= `ADDR_SZ'd2;
+		end
+	16'h6:	
+		begin
+		offset_addr2 <= `ADDR_SZ'd0036;
+		o_offset_len2 <= `ADDR_SZ'd2;
+		end	
+	16'h7:  
+		begin
+		offset_addr2 <= `ADDR_SZ'd0038;
+		o_offset_len2 <= `ADDR_SZ'd2;
+		end
+	16'h8:	
+		begin
+		offset_addr2 <= `ADDR_SZ'd0040;
+		o_offset_len2 <= `ADDR_SZ'd2;
+		end	
+	16'h9:  
+		begin
+		offset_addr2 <= `ADDR_SZ'd0042;
+		o_offset_len2 <= `ADDR_SZ'd3;
+		end
+	16'ha:	
+		begin
+		offset_addr2 <= `ADDR_SZ'd0045;
+		o_offset_len2 <= `ADDR_SZ'd1;
+		end
+	16'hb:  
+		begin
+		offset_addr2 <= `ADDR_SZ'd0046;
+		o_offset_len2 <= `ADDR_SZ'd2;
+		end
+	16'hc:	
+		begin
+		offset_addr2 <= `ADDR_SZ'd0048;
+		o_offset_len2 <= `ADDR_SZ'd1;
+		end
+	16'hd:  
+		begin
+		offset_addr2 <= `ADDR_SZ'd0049;
+		o_offset_len2 <= `ADDR_SZ'd1;
+		end
+	16'he:	
+		begin
+		offset_addr2 <= `ADDR_SZ'd0050;
+		o_offset_len2 <= `ADDR_SZ'd1;
+		end		
+	16'hf:	
+		begin
+		offset_addr2 <= `ADDR_SZ'd0051;
+		o_offset_len2 <= `ADDR_SZ'd1;
+		end	
+	default:
+		begin
+		offset_addr2 <= `ADDR_SZ'h03ff;
+		o_offset_len2 <= `ADDR_SZ'd0;
+		end
+	endcase
+	end
+	else
+	begin
+		offset_addr2 <= `ADDR_SZ'd0000;
+		o_offset_len2 <= `ADDR_SZ'd0;
+	end
+end
+
+/*****************************end************************************/
+
+/*************calculator the Clock_Sync offset address**************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	offset_addr3 <= `ADDR_SZ'd0000;
+	o_offset_len3 <= `ADDR_SZ'h00;
+	end
+	else if(i_dobjid == Clock_Sync)
+	begin
+	case(i_subidx)
+	16'h0:
+		begin
+		offset_addr3 <= `ADDR_SZ'd0000;
+		o_offset_len3 <= `ADDR_SZ'd21;		
+		end
+	16'h1:  
+		begin
+		offset_addr3 <= `ADDR_SZ'd0000;
+		o_offset_len3 <= `ADDR_SZ'd1;		
+		end
+	16'h2:	
+		begin
+		offset_addr3 <= `ADDR_SZ'd0001;
+		o_offset_len3 <= `ADDR_SZ'd1;
+		end	
+	16'h3:  
+		begin
+		offset_addr3 <= `ADDR_SZ'd0002;
+		o_offset_len3 <= `ADDR_SZ'd2;
+		end	
+	16'h4:	
+		begin
+		offset_addr3 <= `ADDR_SZ'd0004;
+		o_offset_len3 <= `ADDR_SZ'd2;
+		end	
+	16'h5:  
+		begin
+		offset_addr3 <= `ADDR_SZ'd006;
+		o_offset_len3 <= `ADDR_SZ'd2;
+		end	
+	16'h6:	
+		begin
+		offset_addr3 <= `ADDR_SZ'd008;
+		o_offset_len3 <= `ADDR_SZ'd2;
+		end	
+	16'h7: 
+		begin
+		offset_addr3 <= `ADDR_SZ'd0010;
+		o_offset_len3 <= `ADDR_SZ'd2;
+		end	
+	16'h8:	
+		begin
+		offset_addr3 <= `ADDR_SZ'd0012;
+		o_offset_len3 <= `ADDR_SZ'd2;	
+		end
+	16'h9:  
+		begin
+		offset_addr3 <= `ADDR_SZ'd0014;
+		o_offset_len3 <= `ADDR_SZ'd4;
+		end
+	16'ha:	
+		begin
+		offset_addr3 <= `ADDR_SZ'd0018;
+		o_offset_len3 <= `ADDR_SZ'd3;
+		end						
+	default:
+		begin
+		offset_addr3 <= `ADDR_SZ'h03ff;
+		o_offset_len3 <= `ADDR_SZ'd0;
+		end
+	endcase
+	end
+	else
+	begin
+	offset_addr3 <= `ADDR_SZ'd0000;
+	o_offset_len3 <= `ADDR_SZ'd0;	
+	end
+end
+
+/*****************************end************************************/
+
+
+
+
+/*************calculator the Max_RSP_TIme offset address**************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	offset_addr4 <= `ADDR_SZ'd0000;
+	o_offset_len4 <= `ADDR_SZ'h00;
+	end
+	else if(i_dobjid == Max_RSP_TIme)
+	begin
+	case(i_subidx)
+	16'h0:
+		begin
+		offset_addr4 <= `ADDR_SZ'd0000;
+		o_offset_len4 <= `ADDR_SZ'd4;		
+		end
+	16'h1:  
+		begin
+		offset_addr4 <= `ADDR_SZ'd0000;
+		o_offset_len4 <= `ADDR_SZ'd1;
+		end
+	16'h2:	
+		begin
+		offset_addr4 <= `ADDR_SZ'd0001;
+		o_offset_len4 <= `ADDR_SZ'd1;
+		end	
+	16'h3:	
+		begin
+		offset_addr4 <= `ADDR_SZ'd0002;
+		o_offset_len4 <= `ADDR_SZ'd2;
+		end	
+	default:
+		begin
+		offset_addr4 <= `ADDR_SZ'h03ff;
+		o_offset_len4 <= `ADDR_SZ'd0;
+		end
+	endcase
+	end
+	else
+	begin
+	offset_addr4 <= `ADDR_SZ'd0000;
+	o_offset_len4 <= `ADDR_SZ'd0;		
+	end
+end
+
+/*****************************end************************************/
+
+
+/*************calculator the Commulation_Sche_Management offset address**************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	offset_addr5 <= `ADDR_SZ'd0000;
+	o_offset_len5 <= `ADDR_SZ'h00;		
+	end
+	else if(i_dobjid == Commulation_Sche_Management)
+	begin
+	case(i_subidx)
+	16'h0:
+		begin
+		offset_addr5 <= `ADDR_SZ'd0000;
+		o_offset_len5 <= `ADDR_SZ'd10;		
+		end
+	16'h1:  
+		begin
+		offset_addr5 <= `ADDR_SZ'd0000;
+		o_offset_len5 <= `ADDR_SZ'd1;			
+		end
+	16'h2:	
+		begin
+		offset_addr5 <= `ADDR_SZ'd0001;
+		o_offset_len5 <= `ADDR_SZ'd1;			
+		end	
+	16'h3:  
+		begin
+		offset_addr5 <= `ADDR_SZ'd0002;
+		o_offset_len5 <= `ADDR_SZ'd2;			
+		end
+	16'h4:	
+		begin
+		offset_addr5 <= `ADDR_SZ'd0004;
+		o_offset_len5 <= `ADDR_SZ'd2;			
+		end
+	16'h5:  
+		begin
+		offset_addr5 <= `ADDR_SZ'd006;
+		o_offset_len5 <= `ADDR_SZ'd1;			
+		end
+	16'h6:	
+		begin
+		offset_addr5 <= `ADDR_SZ'd007;
+		o_offset_len5 <= `ADDR_SZ'd1;			
+		end
+	16'h7:  
+		begin
+		offset_addr5 <= `ADDR_SZ'd008;
+		o_offset_len5 <= `ADDR_SZ'd2;			
+		end
+	default:
+		begin
+		offset_addr5 <= `ADDR_SZ'h03ff;
+		o_offset_len5 <= `ADDR_SZ'd0;			
+		end
+	endcase
+	end
+	else
+	begin
+	offset_addr5 <= `ADDR_SZ'd0000;	
+	o_offset_len5 <= `ADDR_SZ'd0;	
+	end
+end
+
+/*****************************end************************************/
+
+
+
+/*************calculator the Device_App_Info offset address**************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	offset_addr6 <= `ADDR_SZ'd0000;
+	o_offset_len6 <= `ADDR_SZ'h00;	
+	end
+	else if(i_dobjid == Device_App_Info)
+	begin
+	case(i_subidx)
+	16'h0:
+		begin
+		offset_addr6 <= `ADDR_SZ'd0000;
+		o_offset_len6 <= `ADDR_SZ'd2;		
+		end
+	16'h1: 
+		begin
+		offset_addr6 <= `ADDR_SZ'd0000;
+		o_offset_len6 <= `ADDR_SZ'd1;
+		end
+	16'h2:
+		begin
+		offset_addr6 <= `ADDR_SZ'd0001;
+		o_offset_len6 <= `ADDR_SZ'd1;
+		end
+	default:
+		begin
+		offset_addr6 <= `ADDR_SZ'h03ff;
+		o_offset_len6 <= `ADDR_SZ'd0;
+		end
+	endcase
+	end
+	else
+	begin
+	offset_addr6 <= `ADDR_SZ'd0000;	
+	o_offset_len6 <= `ADDR_SZ'd0;
+	end
+end
+
+/*****************************end************************************/
+
+
+
+
+
+
+
+/*************calculator the Domain_Application_Obj_Header offset address**************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	offset_addr9 <= `ADDR_SZ'd0000;
+	o_offset_len9 <= `ADDR_SZ'h00;
+	end
+	else if(i_dobjid == Domain_Application_Obj_Header)
+	begin
+	case(i_subidx)
+	16'h0:
+		begin
+		offset_addr9 <= `ADDR_SZ'd0000;
+		o_offset_len9 <= `ADDR_SZ'd5;		
+		end
+	16'h1:  
+		begin
+		offset_addr9 <= `ADDR_SZ'd0000;
+		o_offset_len9 <= `ADDR_SZ'd1;
+		end
+	16'h2:	
+		begin
+		offset_addr9 <= `ADDR_SZ'd0001;
+		o_offset_len9 <= `ADDR_SZ'd1;
+		end	
+	16'h3:  
+		begin
+		offset_addr9 <= `ADDR_SZ'd0002;
+		o_offset_len9 <= `ADDR_SZ'd1;
+		end
+	16'h4:	
+		begin
+		offset_addr9 <= `ADDR_SZ'd0003;
+		o_offset_len9 <= `ADDR_SZ'd1;
+		end
+	16'h5:  
+		begin
+		offset_addr9 <= `ADDR_SZ'd0004;
+		o_offset_len9 <= `ADDR_SZ'd1;
+		end
+	default:
+		begin
+		offset_addr9 <= `ADDR_SZ'h03ff;
+		o_offset_len9 <= `ADDR_SZ'd0;
+		end
+	endcase
+	end
+	else
+	begin
+	offset_addr9 <= `ADDR_SZ'd0000;
+	o_offset_len9 <= `ADDR_SZ'd0;	
+	end
+end
+
+/*****************************end************************************/
+
+
+
+/*************calculator the FRT_Link_obj_Header offset address**************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	offset_addr10 <= `ADDR_SZ'd0000;
+	o_offset_len10 <= `ADDR_SZ'h00;	
+	end
+	else if(i_dobjid == FRT_Link_obj_Header)
+	begin
+	case(i_subidx)
+	16'h0:
+		begin
+		offset_addr10 <= `ADDR_SZ'd0000;
+		o_offset_len10 <= `ADDR_SZ'd5;		
+		end
+	16'h1:  
+		begin
+		offset_addr10 <= `ADDR_SZ'd0000;
+		o_offset_len10 <= `ADDR_SZ'd1;
+		end
+	16'h2:	
+		begin
+		offset_addr10 <= `ADDR_SZ'd0001;
+		o_offset_len10 <= `ADDR_SZ'd1;
+		end
+	16'h3:  
+		begin
+		offset_addr10 <= `ADDR_SZ'd0002;
+		o_offset_len10 <= `ADDR_SZ'd1;
+		end
+	16'h4:	
+		begin
+		offset_addr10 <= `ADDR_SZ'd0003;
+		o_offset_len10 <= `ADDR_SZ'd1;
+		end
+	16'h5:  
+		begin
+		offset_addr10 <= `ADDR_SZ'd0004;
+		o_offset_len10 <= `ADDR_SZ'd1;
+		end
+	default:
+		begin
+		offset_addr10 <= `ADDR_SZ'h03ff;
+		o_offset_len10 <= `ADDR_SZ'd0;
+		end
+	endcase
+	end
+	else
+	begin
+	offset_addr10 <= `ADDR_SZ'd0000;	
+	o_offset_len10 <= `ADDR_SZ'd0;
+	end
+end
+
+/*****************************end************************************/
+
+
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	o_offset_addr <= `ADDR_SZ'h0;
+	end
+	else
+	begin
+	o_offset_addr <= offset_addr1 + offset_addr2 +offset_addr3 +offset_addr4+offset_addr5+offset_addr6+offset_addr9+offset_addr10;	
+	end
+end
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	o_offset_len <= `ADDR_SZ'h0;
+	end
+	else
+	begin
+	o_offset_len <= o_offset_len1 + o_offset_len2 + o_offset_len3 + o_offset_len4 + o_offset_len5 + o_offset_len6 + o_offset_len9 + o_offset_len10;	
+	end
+end
+
+/*****************************end************************************/
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	o_error <= 1'b0 ;
+	end
+	else if((o_offset_addr == `ADDR_SZ'h03ff) || (o_base_addr == `ADDR_SZ'h03ff))
+	begin
+	o_error <= 1'b1 ;	
+	end
+	else
+	begin
+	o_error <= 1'b0 ;	
+	end
+end
+ 
+endmodule

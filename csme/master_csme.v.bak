@@ -1,0 +1,165 @@
+
+/*******************************************************************
+File name   			:	master_csme.v
+Function    			:	seng conmunication;
+ 
+Version maintenance	:	caogang
+Version     			:	V1.0
+data        			:	2011-02-13
+*******************************************************************/
+
+/***************************   modify record   *********************
+
+**************************************************************************
+**************************************************************************/
+module  master_csme(
+			input wire i_clk,
+			input wire i_rst_n,
+			//
+			input wire i_macrocycle_b,
+			input wire [31:0]i_local_ip,
+			input wire [31:0]i_frt_sendtime,
+			
+			//frt
+			output reg [31:0]o_ind,
+			output reg o_frt_trig,
+			input wire [31:0]i_src_ip,
+			input wire [7:0]i_pri,
+			input wire i_rec_dn,
+			//mm
+			input wire i_csme_en,
+			input wire i_mm_status,
+			output reg o_mm_trig,
+			//ptp
+			input wire [31:0]i_ptp_time_sec,
+			input wire [31:0]i_ptp_time_nsec,
+			output reg o_SyncReq_trig,
+			//arp
+			input wire i_arp_status,
+			output reg o_arp_trig,
+			//evt
+			input wire i_evt_status,
+			output reg o_evt_trig					
+					);
+					
+reg macrocycle_b_dly;
+reg [31:0]send_cnt;
+reg [7:0]hi_pri;
+reg [7:0]local_hi_pri;			
+					
+					
+always @(posedge i_clk or negedge i_rst_n)			
+begin
+	if(!i_rst_n)
+		macrocycle_b_dly <= 1'b0;
+	else
+		macrocycle_b_dly <= i_macrocycle_b;
+end		
+//
+always @(posedge i_clk or negedge i_rst_n)			
+begin
+	if(!i_rst_n)
+		send_cnt <= 32'b0;
+	else if(i_macrocycle_b )
+		send_cnt <= send_cnt + 1'b1;
+	else if(!i_macrocycle_b)
+		send_cnt <= 32'b0;
+end		
+//
+always @(posedge i_clk or negedge i_rst_n)			
+begin
+	if(!i_rst_n)
+		o_frt_trig <= 1'b0;
+	else if(send_cnt >= i_frt_sendtime && i_macrocycle_b)
+		o_frt_trig <= 1'b1;
+	else 
+		o_frt_trig <= 1'b0;
+end		
+
+//calculate the pri in frt frame 
+always @(posedge i_clk or negedge i_rst_n)			
+begin
+	if(!i_rst_n)
+		local_hi_pri <= 8'hff;
+	else if(i_evt_status)
+		local_hi_pri <= 8'h1;
+	else if(i_mm_status)
+		local_hi_pri <= 8'h2;
+	else if(i_arp_status )
+		local_hi_pri <= 8'h3;	
+	else
+		local_hi_pri <= 8'hff;		
+end	
+
+
+//calculate the o_ind in frt frame (for master )
+always @(posedge i_clk or negedge i_rst_n)			
+begin
+	if(!i_rst_n)
+	begin
+		o_ind <= i_local_ip;
+		hi_pri <= local_hi_pri;
+	end
+	else if(i_macrocycle_b && !macrocycle_b_dly)
+	begin
+		o_ind <= i_local_ip;
+		hi_pri <= local_hi_pri;
+	end	
+	else if(i_rec_dn && ( (i_pri < hi_pri) ||  (i_pri == hi_pri && i_src_ip < o_ind  ) ) )
+	begin
+		o_ind <= i_src_ip;
+		hi_pri <= i_pri;
+	end
+end	
+
+
+always @(posedge i_clk or negedge i_rst_n)			
+begin
+	if(!i_rst_n)
+	begin
+		o_evt_trig <= 1'b0;
+		o_mm_trig  <= 1'b0;
+		o_arp_trig <= 1'b0;
+		o_SyncReq_trig <= 1'b0;
+	end
+	else if((i_csme_en && o_ind == i_local_ip && !i_macrocycle_b) || !i_csme_en)
+	begin
+		if(i_evt_status)
+		begin
+			o_evt_trig <= 1'b1;
+			o_mm_trig  <= 1'b0;		
+			o_arp_trig <= 1'b0;	
+			o_SyncReq_trig <= 1'b0;
+		end
+		else if(i_mm_status)
+		begin
+			o_evt_trig <= 1'b0;
+			o_mm_trig  <= 1'b1;
+			o_arp_trig <= 1'b0;	
+			o_SyncReq_trig <= 1'b0;
+		end
+		else if(i_arp_status)
+		begin
+			o_evt_trig <= 1'b0;
+			o_mm_trig  <= 1'b0;	
+			o_arp_trig <= 1'b1;
+			o_SyncReq_trig <= 1'b0;
+		end
+		else 
+		begin
+			o_evt_trig <= 1'b0;
+			o_mm_trig  <= 1'b0;		
+			o_arp_trig <= 1'b0;	
+			o_SyncReq_trig <= 1'b1;
+		end
+	end	
+	else
+	begin
+		o_evt_trig <= 1'b0;
+		o_mm_trig  <= 1'b0;
+		o_arp_trig <= 1'b0;
+		o_SyncReq_trig <= 1'b0;
+	end	
+end	
+
+endmodule

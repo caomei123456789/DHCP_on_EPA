@@ -1,0 +1,236 @@
+module dim(
+		input wire  i_clk,
+		input wire  i_rst_n,
+				
+		input wire  i_Rx_dv_A,
+		input wire [3:0] i_recv_data_A,
+		
+		output wire o_Tx_en_A,
+		output wire [3:0] o_send_data_A,
+		
+		input wire  i_Rx_dv_B,
+		input wire [3:0] i_recv_data_B,
+		
+		output wire o_Tx_en_B,
+		output wire [3:0] o_send_data_B,
+		
+		input wire  i_Rx_dv_C,
+		input wire [3:0] i_recv_data_C,
+		
+		output wire o_Tx_en_C,
+		output wire [3:0] o_send_data_C,
+
+		input wire  i_Rx_dv_host,
+		input wire [3:0] i_recv_data_host,
+		
+		output wire o_Tx_en_host,
+		output wire [3:0] o_send_data_host,	
+		
+		output reg o_get_time_en_frt0,  // frt0 time stamp
+		output reg o_get_time_en_sync, // sync time stamp
+		
+		output reg o_send_recvn		//receive or send
+		
+);
+
+wire  [47:0] dest_mac_A , dest_mac_B , dest_mac_C, dest_mac_host;
+wire  [15:0] pkg_type_A ,pkg_type_B, pkg_type_C, pkg_type_host ;
+wire  [7:0]  frt_type_A , frt_type_B , frt_type_C,frt_type_host, msgid_A ,msgid_B , msgid_C ,msgid_host;
+
+wire [15:0] recv_addr_A ,recv_addr_B, recv_addr_C ,recv_addr_host ;
+
+reg get_time_en_sync,get_time_en_sync_1clk, get_time_en_frt0, get_time_en_frt0_1clk;
+
+
+
+assign o_Tx_en_A = i_Rx_dv_host;
+assign o_send_data_A = i_recv_data_host;
+
+assign o_Tx_en_B = i_Rx_dv_host;
+assign o_send_data_B = i_recv_data_host;
+
+
+assign o_Tx_en_C = i_Rx_dv_host;
+assign o_send_data_C = i_recv_data_host;
+
+assign o_Tx_en_host = i_Rx_dv_A | i_Rx_dv_B | i_Rx_dv_C;
+assign o_send_data_host = i_recv_data_A | i_recv_data_B | i_recv_data_C;
+
+
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+		if(!i_rst_n)
+		begin
+		get_time_en_sync <= 1'b0 ;
+		get_time_en_frt0 <= 1'b0;
+		o_send_recvn <= 1'b0;
+		end
+		else if((pkg_type_A == 16'h8907)&&(frt_type_A == 8'h21))
+		begin
+		get_time_en_sync <= 1'b1 ;
+		get_time_en_frt0 <= 1'b0 ;
+		o_send_recvn <= 1'b1;
+		end	
+		else if((pkg_type_B == 16'h8907)&&(frt_type_B == 8'h21))
+		begin
+		get_time_en_sync <= 1'b1 ;
+		get_time_en_frt0 <= 1'b0 ;
+		o_send_recvn <= 1'b1;
+		end
+		else if((pkg_type_C == 16'h8907)&&(frt_type_C == 8'h21))
+		begin
+		get_time_en_sync <= 1'b1 ;
+		get_time_en_frt0 <= 1'b0 ;
+		o_send_recvn <= 1'b1;
+		end
+		else if((pkg_type_host == 16'h8907)&&(frt_type_host == 8'h10))
+		begin
+		get_time_en_frt0 <= 1'b1 ;
+		get_time_en_sync <= 1'b0 ;
+		o_send_recvn <= 1'b0;
+		end	
+		else if((pkg_type_host == 16'h8907)&&(frt_type_host == 8'h20))
+		begin
+		get_time_en_sync <= 1'b1;
+		get_time_en_frt0 <= 1'b0;
+		o_send_recvn <= 1'b0;
+		end		
+		else
+		begin
+		get_time_en_sync <= 1'b0 ;
+		get_time_en_frt0 <= 1'b0 ;
+		o_send_recvn <= 1'b0;		
+		end
+end
+
+
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+		if(!i_rst_n)
+		begin
+		get_time_en_sync_1clk <= 1'b0;
+		end
+		else
+		begin
+		get_time_en_sync_1clk <= get_time_en_sync;
+		end
+end
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+		if(!i_rst_n)
+		begin
+		get_time_en_frt0_1clk <= 1'b0;
+		end
+		else
+		begin
+		get_time_en_frt0_1clk <= get_time_en_frt0;
+		end
+end
+
+
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+		if(!i_rst_n)
+		begin
+		o_get_time_en_frt0 <= 1'b0;
+		end
+		else if((!get_time_en_frt0_1clk) && get_time_en_frt0)
+		begin
+		o_get_time_en_frt0 <= 1'b1;
+		end
+		else
+		begin
+		o_get_time_en_frt0 <= 1'b0;
+		end
+end
+
+
+/*************sync time tamp***********/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+		if(!i_rst_n)
+		begin
+		o_get_time_en_sync <= 1'b0;
+		end
+		else if((!get_time_en_sync_1clk) && get_time_en_sync)
+		begin
+		o_get_time_en_sync <= 1'b1;
+		end
+		else
+		begin
+		o_get_time_en_sync <= 1'b0;
+		end		
+end
+
+
+
+/*********************analysis the receive data from A port********************/
+PDU_analysis   PDU_analysis1(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		
+		.i_Rx_dv(i_Rx_dv_A),
+		.i_recv_data(i_recv_data_A),
+		
+		.o_dest_mac(dest_mac_A) ,
+		.o_pkg_type(pkg_type_A),
+		.o_frt_type(frt_type_A) ,
+		.o_msgid(msgid_A),
+		.recv_addr(recv_addr_A)	
+);
+/*******************************end*********************************************/
+
+/*********************analysis the receive data from B port********************/
+PDU_analysis   PDU_analysis2(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		
+		.i_Rx_dv(i_Rx_dv_B),
+		.i_recv_data(i_recv_data_B),
+		
+		.o_dest_mac(dest_mac_B),
+		.o_pkg_type(pkg_type_B),
+		.o_frt_type(frt_type_B),
+		.o_msgid(msgid_B),
+		.recv_addr(recv_addr_B)
+);
+/*******************************end*********************************************/
+
+/*********************analysis the receive data from B port********************/
+PDU_analysis   PDU_analysis3(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		
+		.i_Rx_dv(i_Rx_dv_C),
+		.i_recv_data(i_recv_data_C),
+		
+		.o_dest_mac(dest_mac_C),
+		.o_pkg_type(pkg_type_C),
+		.o_frt_type(frt_type_C),
+		.o_msgid(msgid_C),
+		.recv_addr(recv_addr_C)
+);
+/*******************************end*********************************************/
+
+
+/*********************analysis the receive data from host port********************/
+PDU_analysis   PDU_analysis4(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		
+		.i_Rx_dv(i_Rx_dv_host),
+		.i_recv_data(i_recv_data_host),
+		
+		.o_dest_mac(dest_mac_host) ,
+		.o_pkg_type(pkg_type_host),
+		.o_frt_type(frt_type_host) ,
+		.o_msgid(msgid_host),
+		.recv_addr(recv_addr_host)
+);
+/*******************************end*********************************************/
+
+endmodule 

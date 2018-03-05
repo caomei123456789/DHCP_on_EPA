@@ -1,0 +1,369 @@
+/*******************************************************************
+File name   			:	commen_data.v
+Function    			:	1.output the commen data to other modules
+ 
+Version maintenance	:	zourenbo
+Version     			:	V1.0
+data        			:	2010-12-13
+*******************************************************************/
+
+/***************************   modify record   *********************
+
+**************************************************************************
+**************************************************************************/
+`include "../master_rtl/define/define.v"
+module  plant_index(
+		input  wire i_clk,
+		input  wire i_rst_n,
+		
+		input wire i_plant_index_irq,
+		input wire [63:0] i_frt_mac,
+		input wire i_config_flag,
+		output reg [31:0] o_plant_ip,
+		output reg [31:0] o_plant_toffset,
+		output reg [15:0] o_plant_datalen,
+		output reg o_plant_index_done,
+		output reg o_plant_index_error,
+		
+		input wire [15:0] i_ram_data,
+		input wire [`ADDR_SZ-1:0] i_ram_addr,
+		input wire i_wr_en
+
+);
+reg [2:0] State,Nextstate;
+
+
+reg [`ADDR_SZ-1:0] o_emib_addr;
+//		
+reg o_rd_ram_en;
+//		
+wire [15:0] i_emib_data;
+
+
+reg [31:0] ip_list;
+
+//
+reg [15:0] role_list,type_list;
+
+parameter  IDLE = 3'b000;
+parameter  JUDGE_ERROR = 3'b001;
+parameter  GET_IP_H = 3'b010;
+parameter  GET_IP_L = 3'b011;
+parameter  GET_TIME_OFFSET_H = 3'b100;
+parameter  GET_TIME_OFFSET_L = 3'b101;
+parameter  GET_TIME_DATA_LEN = 3'b110;
+parameter  GET_DONE = 3'b111;
+
+
+
+//state1
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	State <= IDLE;
+	end
+	else
+	begin
+	State <= Nextstate;	
+	end
+end
+
+//state2
+always @(*)
+begin
+	if(!i_rst_n)
+	begin
+	Nextstate = IDLE;
+	end
+	else
+	case(State)//
+	IDLE:
+		begin
+		if(i_palnt_index_irq && i_config_flag)
+		Nextstate = JUDGE_ERROR;	   
+		else
+		Nextstate = IDLE;			
+		end	
+	JUDGE_ERROR:
+		begin
+      Nextstate = GET_IP_H;
+		end	
+	GET_IP_H:                      
+		begin
+		Nextstate = GET_IP_L;      
+		end
+	GET_IP_L:                       
+		begin
+		Nextstate = GET_TIME_OFFSET_H;
+		end	
+	GET_TIME_OFFSET_H:                      
+		begin
+		Nextstate = GET_TIME_OFFSET_L;	
+		end		
+	GET_TIME_OFFSET_L:             
+		begin
+ 		Nextstate = GET_TIME_DATA_LEN;	
+		end	
+	GET_TIME_DATA_LEN:         
+		begin
+ 		Nextstate = OUTPUT_SAVE_OFFSET;	
+		end		
+	OUTPUT_SAVE_OFFSET:
+		begin
+ 		Nextstate = GET_DONE;	
+		end		
+	GET_DONE:  
+		begin
+		Nextstate = IDLE;			 
+		end		
+	default:
+		Nextstate = IDLE;				
+	endcase	
+end
+
+
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+//	o_emib_addr <= `ADDR_SZ'd500 ;	//2013.6.9   by shi yu feng
+//	o_emib_addr <= `ADDR_SZ'd499;    //modified by SYF 2013.10.17
+	o_emib_addr <= `ADDR_SZ'd106;    //0x006a
+	o_frt_index_done <= 1'b0 ;
+	o_rd_ram_en <= 1'b0 ;
+	o_frt_index_error <= 1'b0;	
+//2013.6.9  by shi yu feng	
+	turn_cnt <= 16'b0;
+	end
+	else
+	case(Nextstate)
+	IDLE:
+		begin
+//		o_emib_addr <= `ADDR_SZ'd500 ;	//2013.6.9   by shi yu feng
+//		o_emib_addr <= `ADDR_SZ'd499;    //modified by SYF 2013.10.17
+	   o_emib_addr <= `ADDR_SZ'd106;    //0x006a
+		o_frt_index_done <= 1'b0 ;
+		o_rd_ram_en <= 1'b0 ;
+		o_frt_index_error <= 1'b0;	
+//2013.6.9  by shi yu feng	
+		turn_cnt <= 16'b0;
+		end	
+	GET_DATA:
+		begin
+//		o_emib_addr <= `ADDR_SZ'd500 ;	//2013.6.9   by shi yu feng
+//		o_emib_addr <= `ADDR_SZ'd499;    //modified by SYF 2013.10.17
+	   o_emib_addr <= `ADDR_SZ'd106;    //0x006a
+		o_frt_index_done <= 1'b0 ;
+		o_rd_ram_en <= 1'b1 ;
+		o_frt_index_error <= 1'b0;	
+		end
+//2013.6.9   by shi yu feng		
+	GET_LINK_CNT:
+      begin
+//	   o_emib_addr <= o_emib_addr + `ADDR_SZ'd01;   //modified by SYF 2013.10.17
+      o_emib_addr <= `ADDR_SZ'd131;                //0x0083   IP_L
+		o_rd_ram_en <= 1'b1 ;
+		end	
+//		
+	GET_IP_H:
+		begin
+		o_emib_addr <= o_emib_addr + `ADDR_SZ'd01;   //0x0084   IP_H       
+		o_rd_ram_en <= 1'b1 ;
+		end
+	GET_IP_L:
+		begin
+		o_emib_addr <= o_emib_addr;
+		o_rd_ram_en <= 1'b1 ;
+		end
+	COMPARE_IP:
+		begin
+		o_emib_addr <= o_emib_addr + `ADDR_SZ'd01;   //0x0085   DataLen  
+		o_rd_ram_en <= 1'b1;
+		end			
+	OUTPUT_DATA_LEN:
+		begin
+		o_emib_addr <= o_emib_addr + `ADDR_SZ'd01;   //0x0086   DataOffset
+		o_rd_ram_en <= 1'b1 ;
+		end	
+	OUTPUT_DATA_OFFSET:
+		begin
+		o_emib_addr <= o_emib_addr + `ADDR_SZ'd01;   //0x0087   DataSaveOffset
+		o_rd_ram_en <= 1'b1;
+		end
+	OUTPUT_SAVE_OFFSET:
+		begin
+//		o_emib_addr <= o_emib_addr+ `ADDR_SZ'd01;    //modified by SYF 2013.10.17
+		o_rd_ram_en <= 1'b1;
+		end
+ 	GET_NEXT_IP1:	
+		begin
+//		o_emib_addr <= o_emib_addr + `ADDR_SZ'd03;     //modified by SYF 2013.10.17
+		o_emib_addr <= o_emib_addr + `ADDR_SZ'd06;
+		o_rd_ram_en <= 1'b1 ;
+//2013.6.9    by shi yu feng		
+		turn_cnt <= turn_cnt +1'b1;
+		end		
+	COMPARE_DONE:
+		begin
+//		o_emib_addr <= `ADDR_SZ'd500 ;	//2013.6.9   by shi yu feng
+//		o_emib_addr <= `ADDR_SZ'd499;    //modified by SYF 2013.10.17
+	   o_emib_addr <= `ADDR_SZ'd106;    //0x006a
+		o_frt_index_done <= 1'b1;
+		o_frt_index_error <= 1'b0;
+		o_rd_ram_en <= 1'b0 ;
+//2013.6.9  by shi yu feng	
+		turn_cnt <= 16'b0;
+		end		
+	COMPARE_ERROR:
+		begin
+//		o_emib_addr <= `ADDR_SZ'd500 ;	//2013.6.9   by shi yu feng
+//		o_emib_addr <= `ADDR_SZ'd499;    //modified by SYF 2013.10.17
+	   o_emib_addr <= `ADDR_SZ'd106;    //0x006a	
+		o_frt_index_done <= 1'b0 ;
+		o_frt_index_error <= 1'b1;
+//2013.6.9  by shi yu feng	
+		turn_cnt <= 16'b0;
+		end
+	default :
+		begin
+//		o_emib_addr <= `ADDR_SZ'd500 ;	//2013.6.9   by shi yu feng
+//		o_emib_addr <= `ADDR_SZ'd499;    //modified by SYF 2013.10.17
+	   o_emib_addr <= `ADDR_SZ'd106;    //0x006a
+		o_frt_index_done <= 1'b0 ;
+		o_frt_index_error <= 1'b1;		
+		o_rd_ram_en <= 1'b0 ;
+//2013.6.9  by shi yu feng	
+		turn_cnt <= 16'b0;
+		end
+	endcase
+end
+
+/*********************************************************/
+always @(posedge i_clk or negedge i_rst_n)    //2013.6.9  by shi yu feng
+begin
+	if(!i_rst_n)
+	begin
+	link_cnt <=  16'h0 ;
+	end
+	else if(State == GET_LINK_CNT)
+	begin
+	link_cnt <=  i_emib_data ;	
+	end
+	else if(State == IDLE)
+	begin
+	link_cnt <=  16'h0 ;
+	end	
+end
+/*********************************************************/
+
+/******************ip list in ram*************************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	ip_list <=  32'h0 ;
+	end
+	else if(State == GET_IP_H)
+	begin
+	ip_list[31:16] <=  i_emib_data ;	
+	end
+	else if(State == GET_IP_L)
+	begin
+	ip_list[15:0] <=  i_emib_data ;	
+	end	
+	else if(State == IDLE)
+	begin
+	ip_list <=  32'h0 ;
+	end	
+end
+/******************end***********************/
+
+
+/***************output frt data  len******************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	o_frt_offset_len <=  16'h0 ;
+	end
+	else if(State == OUTPUT_DATA_LEN)
+	begin
+	o_frt_offset_len  <=  i_emib_data[15:1] ;	
+	end
+	else
+	begin
+	o_frt_offset_len  <=  o_frt_offset_len ;	
+	end	
+end
+/******************end***********************/
+
+
+
+/***************output frt data offset ******************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	o_frt_data_offset <=  16'h0 ;
+	end
+	else if(State == OUTPUT_DATA_OFFSET)
+	begin
+	o_frt_data_offset  <=  i_emib_data[15:1] ;	
+	end
+	else 
+	begin
+	o_frt_data_offset  <=  o_frt_data_offset ;	
+	end	
+end
+/******************end***********************/
+
+
+/***************output frt data  len******************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	o_frt_save_offset <=  16'h0 ;
+	end
+	else if(State == OUTPUT_SAVE_OFFSET)
+	begin
+	o_frt_save_offset  <=  i_emib_data[15:1] ;	
+	end
+	else
+	begin
+	o_frt_save_offset  <=  o_frt_save_offset ;	
+	end	
+end
+/******************end***********************/
+
+/***************output frt data  len******************/
+always @(posedge i_clk or negedge i_rst_n)
+begin
+	if(!i_rst_n)
+	begin
+	o_out_data_len <=  16'h0 ;
+	end
+	else if(State == OUTPUT_DATA_LEN)
+	begin
+	o_out_data_len  <=  i_emib_data[15:1] ;	
+	end
+	else
+	begin
+	o_out_data_len  <=  o_out_data_len ;	
+	end	
+end
+/******************end***********************/
+
+emib_ram emib_back(
+//	.aclr(i_rst_n),
+	.clock(i_clk),
+	.data(i_ram_data),
+	.rdaddress(o_emib_addr),
+	.rden(o_rd_ram_en),
+	.wraddress(i_ram_addr),
+	.wren(i_wr_en),
+	.q(i_emib_data)
+	);
+
+endmodule 

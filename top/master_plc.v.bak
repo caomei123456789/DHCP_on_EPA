@@ -1,0 +1,1000 @@
+
+
+
+module master_plc(
+					input wire i_clk_50,
+					//cpu
+//					input wire [11:0]i_addr_cpu,
+//					inout wire [15:0]b_data_cpu,
+//					input wire i_rd_wr_cpu,
+//					input wire i_oe_cpu,
+//					input wire i_cpu_cs,
+//					output wire o_busy_cpu,
+					//flash
+					inout b_sda,
+					output wire o_scl,
+					//phy
+					output wire o_phy_clk0,		
+					output wire o_phy_clk1, 		
+					inout wire b_mdio,
+					output wire o_mdc,
+					output wire o_rst_phy0_n,
+					output wire o_rst_phy1_n,
+//					input wire i_CRS,
+//					input wire i_COL,
+					//DMI
+					input wire i_Rx_dv_A,
+					input wire [3:0] i_recv_data_A,
+					output wire o_Tx_en_A,
+					output wire [3:0]o_send_data_A,
+					input wire i_Rx_dv_B,
+					input wire [3:0]i_recv_data_B,
+					output wire o_Tx_en_B,
+					output wire [3:0]o_send_data_B,
+//					input wire i_Rx_dv_C,
+//					input wire [3:0]i_recv_data_C,
+//					output wire o_Tx_en_C,
+//					output wire [3:0]o_send_data_C,
+					//
+//					input wire i_link_a,
+//               input wire i_link_b,
+//					input wire i_link_d,
+					//LED
+					output wire o_led_run,
+					output wire o_led_rdt,
+					output wire o_led_err,
+					output wire o_macrocycle_b,
+					
+					output wire o_get_time_en_frt0
+					
+);
+
+
+reg [31:0]cnt;
+reg i_rst_n;
+reg i_clk;
+always @(posedge i_clk_50)
+begin
+	i_clk <= ~i_clk;
+end
+//mm
+	wire mm_irq;
+	wire [9:0]mm_len;
+	wire mm_nxt_pkg;
+	wire [15:0]mm_data;
+	wire [9:0]mm_rd_addr;
+	wire [2:0]mm_port_select;
+
+	
+	wire [15:0]dobjid;
+	wire [15:0]subidx;
+	wire emib_wr_en;
+	wire [15:0]mm_to_emib_data;
+	
+	wire emib_rd_en;
+	wire [9:0] emib_to_mm_data_len;
+	wire [15:0]emib_to_mm_data;
+	wire mm_status;
+	wire csme_en;
+	wire mm_trig;
+//DPRAM
+wire  [15:0] wr_dpram_data,rd_dpram_data;
+wire  wr_dpram_en,rd_dpram_en;
+wire [11:0] dpram_addr;
+
+wire dpram_valid;
+wire mm_rd_dpram_en;
+wire [11:0]mm_rd_dpram_addr;
+wire rd_rsp_en;
+
+wire macrocycle_b;
+wire commen_data_rd_done;
+	
+//EMIB		
+
+wire [47:0]local_node_mac;
+wire [31:0]local_node_ip;
+wire [31:0]first_ip_mask;
+wire [31:0]second_ip_mask;
+
+wire write_emib_done;
+wire read_emib_done;
+wire write_emib_error;
+wire read_emib_error;
+wire [15:0]frt0_data_len;
+wire [15:0]ptp_num;
+
+//FRT
+	wire frt_irq;
+	wire [9:0]frt_len;
+	wire frt_nxt_pkg;
+	wire [15:0]frt_data;
+	wire [9:0]frt_rd_addr;
+	wire [1:0]frt_port_select;
+	
+	wire dpram_index_irq;
+	wire dpram_index_dn;
+	wire [31:0]dpram_ip;
+	wire [15:0]frt_offset_len;
+	wire [15:0]frt_offset_data;
+	wire [15:0]frt_save_offset;
+	wire frt_cs;
+	
+//PTP			
+	wire ptp_irq;
+	wire [9:0]ptp_len;
+	wire ptp_nxt_pkg;
+	wire [15:0]ptp_data;
+	wire [9:0]ptp_rd_addr;
+
+	wire [31:0]ptptime_second;
+	wire [31:0]ptptime_nanosecond;
+	wire [31:0]second_frt_send;
+	wire [31:0]nanosecond_frt_send;
+	wire get_time_en_frt0_s;
+	wire get_time_en_sync_s;
+	
+	wire get_time_en_frt0_m;
+	wire get_time_en_sync_m;
+	wire [31:0]ptp_loop_ip;
+	wire ptp_spd_valid;
+//main_clock_compete
+	wire mcc_irq;
+	wire [15:0]mcc_data;
+	wire [9:0]mcc_rd_addr;
+	wire [9:0]mcc_len;	
+	wire mcc_nxt_pkg;
+	
+	wire main_clock_state;
+
+//CSME
+	wire SyncReq_trig;
+	
+	wire [31:0]frt_ind;
+	wire pdo_trig;
+	wire [31:0]frt_src_ip;
+	wire [7:0]frt_pri;
+	wire frt_rec_dn;
+	
+//BUS
+	wire mac_irq;
+	wire [9:0]mac_len;
+	wire mac_nxt_pkg;
+	wire [15:0]mac_data;
+	wire [9:0]mac_rd_addr;
+	wire [2:0]mac_port_select;
+
+//MAC
+
+wire [15:0] recv_data;
+wire data_valid;
+wire [9:0]recv_addr;
+wire GetTimeEn_send;
+wire GetTimeEn_recv;
+wire [3:0] data_recv;
+wire [3:0] data_send;
+wire EtxEn;
+wire ErxDv;
+wire send_recvn_s;
+wire send_recvn_m;
+//DMI
+wire [15:0]porta_recv_num;
+wire [15:0]portb_recv_num;
+
+wire recv_port_id;
+//flash
+wire [15:0] flash_wr_data;
+wire [9:0] flash_wr_addr_offset;
+wire [9:0] flash_data_len;
+wire flash_rd_irq;
+
+wire [15:0]flash_to_emib_wr_data;
+wire flash_to_emib_rd_en;
+wire [9:0]flash_to_emib_rd_addr;
+wire flash_to_emib_read_done;
+wire flash_wr_irq;
+wire flash_wr_en;
+wire [9:0] flash_wr_addr;
+//flash channel
+wire emib_wr_irq;
+wire [15:0] emib_to_flash_wr_data;
+wire [9:0]emib_to_flash_wr_addr_offset;
+wire [9:0] emib_to_flash_data_len;
+wire flash_to_emib_wr_en;
+wire [9:0]flash_to_emib_wr_addr;
+
+wire wr_dn;
+
+wire dpram_wr_irq;
+wire [15:0] dpram_to_flash_wr_data;
+wire [9:0] dpram_to_flash_wr_addr_offset;
+wire [9:0] dpram_to_flash_data_len;
+wire flash_to_dpram_wr_en;
+wire [9:0]flash_to_dpram_wr_addr;
+wire [15:0]flash_to_dpram_wr_data;
+
+
+wire new_ptptime_comp_done;
+wire [31:0] new_ptptime_second;
+wire [31:0] new_ptptime_nanosecond;
+
+/****************CPU interface****************/
+
+wire [11:0]addr_cpu;
+wire [15:0]data_cpu;
+wire rd_wr_cpu;
+wire oe_cpu;
+wire cpu_cs;
+wire busy_cpu;
+
+wire  [15:0] recv_data_c,send_data_c;
+ 
+wire  [9:0] recv_addr_c, send_addr_c;
+
+wire  [15:0] lenth_c;
+wire  sendIdl_c,SendIrq_opc;
+
+wire data_valid_c;
+
+
+//ARP
+wire arp_irq;
+wire [9:0]arp_len;
+wire arp_nxt_pkg;
+wire [15:0]arp_data;
+wire [9:0]arp_rd_addr;
+
+//link index
+wire [15:0] in_slave_len;
+wire [15:0] in_slave_offset;
+wire [15:0] in_save_offset,out_data_len;
+/**********************end***********************/
+
+wire cpu_err;
+wire initDn;
+wire master_state;
+
+wire clk_100;
+
+wire start_en;
+
+wire start_en_already;
+wire main_clock_lost;
+parameter RESET_TIME = 32'd2000;
+//assign o_phy_clk0 = i_clk;
+//assign o_phy_clk1 = i_clk;
+assign csme_en = commen_data_rd_done && (main_clock_state || start_en_already);
+
+assign slaver_num = 8'd16;
+assign o_macrocycle_b = macrocycle_b ;
+//initial
+//begin
+//	cnt = 32'h0;
+//end
+always @(posedge i_clk)
+begin
+if(cnt <= RESET_TIME )
+	cnt <= cnt + 1'b1;
+else
+	cnt <= cnt;
+end
+
+always @(posedge i_clk)
+begin
+if(cnt > RESET_TIME )
+	i_rst_n <= 1'b1;
+else
+	i_rst_n <= 1'b0;
+end
+
+	flash_interface flash_interface(
+		/*** common pin***/
+		.i_clk(i_clk),//the system clock
+		.i_rst_n(i_rst_n), // the reset signal , low effective
+		/***connect with EMIB***/
+		.i_wr_irq(flash_wr_irq),// write interrupt,high effective
+		.i_flash_data(flash_wr_data),//data for writing into flash
+		.i_flash_addr_offset(flash_wr_addr_offset),
+		.i_flash_data_len(flash_data_len),
+		.i_rd_irq(flash_rd_irq),
+		.o_flash_wr_en(flash_wr_en),
+		.o_flash_waddr(flash_wr_addr),
+		.o_wr_dn(wr_dn),
+		/*********read****************************/
+		.o_flash_data(flash_to_emib_wr_data),
+		.o_flash_rd_en(flash_to_emib_rd_en),
+		.o_flash_raddr(flash_to_emib_rd_addr),
+		.o_flash_read_done(flash_to_emib_read_done),
+		/*** connect with flash***/
+		.o_scl(o_scl),
+		.b_sda(b_sda)
+);
+
+
+flash_write_channel flash_write_channel(
+      .i_clk(i_clk),//the system clock
+		.i_rst_n(i_rst_n), 
+		/*****emib***************/
+		.i_emib_irq(emib_wr_irq),
+		.i_emib_data(emib_to_flash_wr_data),//data for writing into flash
+		.i_emib_addr_offset(emib_to_flash_wr_addr_offset),
+		.i_emib_data_len(emib_to_flash_data_len),
+      .o_emib_wr_en(flash_to_emib_wr_en),
+		.o_emib_waddr(flash_to_emib_wr_addr),
+		/*********dpram*****************/
+		.i_dpram_irq(1'b0/*dpram_wr_irq*/),
+		.i_dpram_data(dpram_to_flash_wr_data),//data for writing into flash
+		.i_dpram_addr_offset(dpram_to_flash_wr_addr_offset),
+		.i_dpram_data_len(dpram_to_flash_data_len),
+		.o_dpram_wr_en(flash_to_dpram_wr_en),
+		.o_dpram_waddr(flash_to_dpram_wr_addr),
+		/********flash****************************/		
+		.i_flash_wr_en(flash_wr_en),
+		.i_flash_waddr(flash_wr_addr),
+		.i_wr_dn(wr_dn),
+      .o_flash_irq(flash_wr_irq),// write interrupt,high effective
+		.o_flash_data(flash_wr_data),//data for writing into flash
+		.o_flash_addr_offset(flash_wr_addr_offset),
+		.o_flash_data_len(flash_data_len)
+);
+
+
+	MM_MASTER MM_MASTER(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		//frt
+		.i_frt_cs(frt_cs),
+		//dpram
+//		.i_dpram_data(data_dpram),
+//		.o_mm_rd_dpram_en(mm_rd_dpram_en),
+//		.o_mm_rd_dpram_addr(mm_rd_dpram_addr),
+/*********MII interface signals*****************/
+		.i_recv_data(recv_data),
+		.i_data_valid(data_valid),
+		.i_recv_addr(recv_addr),		
+		.o_mm_send_irq(mm_irq),
+		.o_send_data(mm_data),
+		.i_send_addr(mm_rd_addr),
+		.o_send_mm_len(mm_len),	
+		.i_mm_next_pkg(mm_nxt_pkg),
+/*********Send MM signal to emib****************/			
+		.o_dobjid(dobjid),
+		.o_subidx(subidx),
+		.o_wr_en(emib_wr_en),	
+		.o_mm_to_emib_data(mm_to_emib_data),		
+/********* MM signal from ptp****************/		
+		.i_ptp_loop_ip(ptp_loop_ip),
+		.i_ptp_spd_valid(ptp_spd_valid),
+/********* MM signal from emib****************/		
+		.o_rd_en(emib_rd_en),
+		.i_mm_data_len(emib_to_mm_data_len),
+		.i_emib_to_mm_data(emib_to_mm_data),
+		.o_rd_emib(rd_rsp_en),
+		
+		.i_local_node_ip(local_node_ip),
+		.i_local_node_mac(local_node_mac),
+	
+		.i_read_error(read_emib_error),
+		.i_write_error(write_emib_error) ,
+		.i_write_done(write_emib_done),
+		.i_read_done (read_emib_done),	
+		
+	   .o_mm_status(mm_status),
+		.o_port_select(mm_port_select),
+		.i_mm_trig(mm_trig),
+		.o_csme_en(start_en),
+		.o_start_en_already(start_en_already)
+		);
+
+	wire device_work_rdt;
+	wire [7:0]slaver_num;
+	wire [31:0]MacroCycle_time;
+	wire [31:0]RealCycle_time;
+	wire [31:0]Sendtime_offset;
+	
+	dpram dpram(
+			.i_clk_fpga(i_clk),
+			.i_clk_100(clk_100),
+			.i_rst_n(i_rst_n),
+			.i_macrocycle_b(macrocycle_b),
+			// input wire i_clk_cpu,
+			//basci info
+			.o_dpram_valid(dpram_valid),
+			.o_work_rdt(device_work_rdt),
+//			.o_slaver_num(slaver_num),
+			.o_MacroCycle_time(MacroCycle_time),
+			.o_RealCycle_time(RealCycle_time),
+			.o_Sendtime_offset(Sendtime_offset),
+			//mm
+			.i_mm_rd_dpram_en(mm_rd_dpram_en),
+			.i_mm_rd_dpram_addr(mm_rd_dpram_addr),
+			.o_data_dpram(rd_dpram_data),
+			//cpu
+			.i_addr_cpu(addr_cpu),
+			.b_data_cpu(data_cpu),
+			.i_rd_wr_cpu(rd_wr_cpu),
+			.i_oe_cpu(oe_cpu),
+			.i_cpu_cs(cpu_cs),//low active
+ 			.o_busy_cpu(busy_cpu),//low active
+			//
+			.i_addr_frt(dpram_addr),
+			.i_data_frt(wr_dpram_data),
+			.i_rd_en_frt(rd_dpram_en),
+			.i_wr_en_frt(wr_dpram_en)
+);	
+
+	macrocycle macrocycle(
+			.COM_Clk_in(i_clk),
+			.COM_Reset_n_in(i_rst_n),
+			.CPUIF_MacroCycle_in(MacroCycle_time),  /**** value of macrocycle  ****/
+			.CPUIF_RealCycle_in(RealCycle_time),   /****  value of ptime ****/
+			.PTP_Time_Sec_in(ptptime_second),//s
+			.PTP_Time_NSec_in(ptptime_nanosecond),//ns
+			.Multi_Time_Limited(),      /**** limit signal to stop send package in a macrocycle  ****/
+			.Multi_MacroCycle_b_out(macrocycle_b)   /**** signal of macrocycle  ****/
+);
+
+wire [31:0] index_ip;
+wire link_index_dn, link_index_irq;
+
+	emib  emib(
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+
+/***************MM signals*************************/	
+			.dobjid(dobjid),
+			.subidx(subidx),
+			.i_rd_en(emib_rd_en),
+			.i_wr_en(emib_wr_en),
+			.i_mm_data(mm_to_emib_data),
+			.base_addr(),
+			.o_mm_data(emib_to_mm_data),
+			.i_rd_rsp_en(rd_rsp_en),
+			.o_write_done(write_emib_done),
+			.o_read_done(read_emib_done),
+			.o_write_error(write_emib_error),
+			.o_read_error(read_emib_error),		
+			.o_mm_data_len(emib_to_mm_data_len),
+
+/***************flash interface signals*************************/		
+			.i_flash_raddr(flash_to_emib_wr_addr),
+			.o_flash_rd_irq(flash_rd_irq),
+			.i_flash_rd_en(flash_to_emib_wr_en),
+			.o_flash_data(emib_to_flash_wr_data),
+		
+			.i_flash_waddr(flash_to_emib_rd_addr),
+			.i_flash_data(flash_to_emib_wr_data),	
+			.i_flash_wr_en(flash_to_emib_rd_en),
+			.o_flash_wr_irq(emib_wr_irq),
+			.i_read_flash_done(flash_to_emib_read_done),
+			.o_flash_addr_offset(emib_to_flash_wr_addr_offset),
+			.o_flash_data_len(emib_to_flash_data_len),
+/***************frt interface signals*************************/				
+			.i_frt_ip(index_ip),
+			.o_frt_type(),
+			.i_frt_service_role(1'b1),	
+		   .o_out_data_len(out_data_len),
+			.o_frt_offset_len(in_slave_len),
+			.o_frt_data_offset(in_slave_offset),
+			.o_frt_save_offset(in_save_offset),
+
+			.i_frt_index_irq(link_index_irq),
+		
+			.o_frt_index_done(link_index_dn),
+	
+/***************commen_data signals*************************/	
+			.o_frt0_data_len(),	
+			.o_local_mac(local_node_mac),
+			.o_local_node_ip(local_node_ip),
+			.o_macro_cycle_time(),
+			.o_real_cycle_time(),
+			.o_frt_send_time(),	
+			.o_ptp_num(),
+			.o_commen_data_rd_done(commen_data_rd_done)		
+					
+);			
+
+
+//	
+//	FRT_MASTER FRT_MASTER(		
+//			.i_clk(i_clk),
+//			.i_rst_n(i_rst_n),
+//			
+//			//state_ctrl
+//			.i_macrocycle_b(macrocycle_b),
+//			
+//			//dpram
+//			.i_local_ip(local_node_ip),
+//			.i_local_mac(local_node_mac),
+//			.o_dpram_index_irq(dpram_index_irq), //to get link info
+//			.i_dpram_index_dn(dpram_index_dn), //indicate the link info has gotten
+//			.o_dpram_ip(dpram_ip),// to emib
+////			.o_emib_service_role(emib_service_role),//to emib
+////		.i_frt_len(frt0_data_len),// length of FRT0
+//			.i_frt_offset_len(frt_offset_len),//from emib .the length of offset
+//			.i_frt_offset_data(frt_offset_data),//from emib.the length of usable data
+//			//DPRAM
+//			.o_DPRAM_addr(addr_frt),
+//			.i_data_frt(data_dpram),
+//			.o_wr_dpram_data(wr_dpram_data),
+//			.o_cs(frt_cs),
+//			.o_rd_en(rd_en_frt),
+//			.i_busy(busy_fpga),
+//			.o_wr_en(wr_en_frt),
+//			//MM
+//			.i_csme_en(csme_en),//switch of csme
+//			//PTP
+//			.i_sync_data_s(second_frt_send),//for FRT0 SYNC
+//			.i_sync_data_ns(nanosecond_frt_send),//FOR FRT0 SYNC
+//			//CSME
+//			.i_ind(frt_ind),// ind field of FRT0
+//			.i_csme_trig(frt_trig),//trig frt to send
+//			.o_src_ip(frt_src_ip),//source ip of frt0 received from other device
+//			.o_pri(frt_pri),//access the PRI field of frt0 from other device 
+//			.o_rec_dn(frt_rec_dn),//indicate the progress of data receiving is over 
+//			//BUSCONVERT
+//			.o_frt_irq(frt_irq),//irq for data sending
+//			.o_frt_len(frt_len),//length of the pkt to be sent
+//			.i_frt_nxt_pkg(frt_nxt_pkg),//indicate the pkt can send if it is high
+//			.o_frt_data(frt_data),//data signal for sending
+//			.i_frt_rd_addr(frt_rd_addr),//read addr for sending
+//			.o_port_select(frt_port_select),//the port which the pkt send to ,2'b01 is port A,2'b10 is port B,2'b11 is both A and B.
+//			//MII
+//			.i_recv_data(recv_data),//data signal for receiving
+//			.i_data_valid(data_valid),//data valid if high
+//			.i_recv_addr(recv_addr)//receive addr when receiving
+//			);
+
+
+
+	
+pdo_slave  pdo_slave(		
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			.i_clk_100(clk_100),
+			
+			//state_ctrl
+			.i_macrocycle_b(macrocycle_b),
+			
+			.o_link_index_irq(link_index_irq),  
+			.i_link_index_dn(link_index_dn),  
+			.i_link_index_err(link_index_err),
+			.o_index_ip(index_ip), 			
+			//dpram
+			.i_local_ip(local_node_ip),
+			.i_local_mac(local_node_mac),
+
+			//MM
+			.i_csme_en(csme_en),//switch of csme
+			//PTP
+			.i_sync_data_s(ptptime_second),//for test
+			.i_sync_data_ns(ptptime_nanosecond),//FOR test
+ 
+			//BUSCONVERT
+			.o_pdo_irq(frt_irq),
+			.o_pdo_len(frt_len),
+			.i_pdo_nxt_pkg(frt_nxt_pkg),
+			.o_pdo_data(frt_data),
+			.i_pdo_rd_addr(frt_rd_addr),
+			//MII
+			.i_recv_data(recv_data),
+			.i_data_valid(data_valid),
+			.i_recv_addr(recv_addr),
+			
+			.i_out_data_len(out_data_len),
+					
+			.i_in_slave_len(in_slave_len),
+			.i_in_slave_offset(in_slave_offset),
+			.i_in_slave_save_offset(in_save_offset),		
+
+			.o_dpram_addr(dpram_addr),
+			.o_wr_dpram_en(wr_dpram_en),
+			.o_rd_dpram_en(rd_dpram_en),
+			.o_wr_dpram_data(wr_dpram_data),
+			.i_rd_dpram_data(rd_dpram_data),
+			
+			.i_write_dpram_trig(write_dpram_trig),
+			.i_read_dpram_trig(read_dpram_trig),
+			.i_pdo_trig(pdo_trig)
+//            //AC
+//			.i_ac_pri(ac_pri),
+//			.i_ac_status(ac_status)
+			);
+
+ptp ptp(
+                    /************************/
+                    /*common interface*/
+                    /*************************/
+                    .i_clk(i_clk),
+                    .i_rst_n(i_rst_n),
+                    /********************************************************/
+                    /*interface for mac*/
+                    /********************************************************/
+                    .i_recv_data(recv_data),
+                    .i_data_valid(data_valid),
+                    .i_recv_addr(recv_addr),
+                    /********************************************************/
+                    /*interface for hub*/
+                    /********************************************************/                   
+					.i_send_recvn_s(send_recvn_s),
+					.i_GetTimeEn_frt0_s(get_time_en_frt0_s),
+					.i_GetTimeEn_sync_s(get_time_en_sync_s),
+					
+					.i_send_recvn_m(send_recvn_m),
+					.i_GetTimeEn_frt0_m(get_time_en_frt0_m),
+					.i_GetTimeEn_sync_m(get_time_en_sync_m),					
+				                                                             
+                    /*************************/
+                    /*interface for csme*/
+                    /*************************/
+                    .i_req_trig(SyncReq_trig),
+						  .i_macrocycle_b(macrocycle_b),
+						  /*************************/
+                    /*interface for CSME and MacroCycle*/
+                    /*************************/
+					.o_ptptime_second(ptptime_second),
+                    .o_ptptime_nanosecond(ptptime_nanosecond),
+                    /****************************************/
+                    /*interface for data_bus_control */
+                    /***************************************/
+					.i_read_addr(ptp_rd_addr),
+					.i_next_pkg(ptp_nxt_pkg),
+					.o_send_irq(ptp_irq),
+                    .o_data(ptp_data),
+                    .o_len(ptp_len),
+                    /*************************/
+                    /*interface for FRT*/
+                    /*************************/		
+		            .i_len_sync(10'd30),
+			        .o_second_frt_send(second_frt_send),
+					.o_nanosecond_frt_send(nanosecond_frt_send),
+                    /*************************/
+                    /*interface for MM*/
+                    /*************************/	
+                    .o_spd_done(ptp_spd_valid),
+                    .o_loop_ip(ptp_loop_ip),
+                    /*************************/
+                    /*interface for EMIB*/
+                    /*************************/	
+                    .i_loop_num(slaver_num),
+                    .i_local_ip(local_node_ip),
+                    .i_local_mac(local_node_mac),
+                    .i_dpram_valid(dpram_valid),
+						
+//				        .i_new_ptptime_comp_done(new_ptptime_comp_done),		
+//						  .i_new_ptptime_second(new_ptptime_second),
+//						  .i_new_ptptime_nanosecond(new_ptptime_nanosecond),
+						  .i_initDn(initDn)
+	);
+	
+wire  write_dpram_trig, read_dpram_trig;
+main_clock_compete main_clock_compete(			
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			//state_ctrl
+			.i_macrocycle_b(macrocycle_b),
+			//dpram
+			.i_local_ip(local_node_ip),
+			.i_local_mac(local_node_mac),
+			//phy
+			.i_initDn(initDn),
+//			//emib
+//			.i_commen_data_rd_done(commen_data_rd_done),
+		
+			//MII interface signals 
+         .i_recv_data(recv_data),
+         .i_data_valid(data_valid),
+         .i_recv_addr(recv_addr),
+			//bus interface signals 
+			.o_mcc_send_irq(mcc_irq),
+			.o_send_data(mcc_data),
+			.i_send_addr(mcc_rd_addr),
+			.o_send_mcc_len(mcc_len),	
+			.i_mcc_nxt_pkg(mcc_nxt_pkg),
+			//ptp,csme
+			.o_main_clock_state(main_clock_state),
+			.o_main_clock_lost(main_clock_lost)
+);
+	master_csme master_csme(
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			//
+			.i_macrocycle_b(macrocycle_b),
+			.i_local_ip(local_node_ip),
+			.i_frt_sendtime(Sendtime_offset),
+			//frt
+			.o_ind(frt_ind),
+			.o_frt_trig(pdo_trig),
+			.i_src_ip(frt_src_ip),
+			.i_pri(frt_pri),
+			.i_rec_dn(frt_rec_dn),
+			//mm
+			.i_csme_en(csme_en),
+			.i_mm_status(mm_status),
+			.o_mm_trig(mm_trig),
+			//ptp
+			.o_SyncReq_trig(SyncReq_trig),
+			.o_opc_trig(opc_pkg_trig),
+			//evt
+			.i_evt_status(),
+			.o_evt_trig(),
+			.o_write_dpram_trig(write_dpram_trig),
+			.o_read_dpram_trig(read_dpram_trig),
+			.i_main_clock_state(main_clock_state)
+
+					);
+
+	
+	bus_convert bus_convert(
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			//frt
+			.i_frt_irq(frt_irq),
+			.i_frt_len(frt_len),
+			.o_frt_nxt_pkg(frt_nxt_pkg),
+			.i_frt_data(frt_data),
+			.o_frt_rd_addr(frt_rd_addr),
+			.i_frt_port_select(),
+			//ptp
+			.i_ptp_irq(ptp_irq),
+			.i_ptp_len(ptp_len),
+			.o_ptp_nxt_pkg(ptp_nxt_pkg),
+			.i_ptp_data(ptp_data),
+			.o_ptp_rd_addr(ptp_rd_addr),
+			.i_ptp_port_select(),
+			//mm
+			.i_mm_irq(mm_irq),
+			.i_mm_len(mm_len),
+			.o_mm_nxt_pkg(mm_nxt_pkg),
+			.i_mm_data(mm_data),
+			.o_mm_rd_addr(mm_rd_addr),
+			.i_mm_port_select(),	
+			//main_clock_compete
+			.i_mcc_irq(mcc_irq),
+			.i_mcc_len(mcc_len),
+			.o_mcc_nxt_pkg(mcc_nxt_pkg),
+			.i_mcc_data(mcc_data),
+			.o_mcc_rd_addr(mcc_rd_addr),
+			.i_mcc_port_select(),
+				//arp
+			.i_arp_irq(arp_irq),
+			.i_arp_len(arp_len),
+			.o_arp_nxt_pkg(arp_nxt_pkg),
+			.i_arp_data(arp_data),
+			.o_arp_rd_addr(arp_rd_addr),
+			.i_arp_port_select(),
+		
+
+			//mac
+			.o_mac_irq(mac_irq),
+			.o_mac_len(mac_len),
+			.i_mac_nxt_pkg(mac_nxt_pkg),
+			.o_mac_data(mac_data),
+			.i_mac_rd_addr(mac_rd_addr),
+			.o_mac_port_select(mac_port_select)
+					
+					);			
+
+
+	ether_mac ether_mac(
+			/**************
+			common pin
+			*************/
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			/***********************
+			pins for data_bus
+			***********************/
+			.i_SendIrq(mac_irq),
+			.i_data_send(mac_data),
+			.i_lenth(mac_len),
+			.o_data_addr(mac_rd_addr),
+			.o_renew_pkg(mac_nxt_pkg),
+			/***********************
+			pins for DMI
+			***********************/ 
+			.i_ErxDv(ErxDv),
+			.i_data_recv(data_recv),
+			.o_EtxEn(EtxEn),
+			.o_data_send(data_send),
+			/***************************
+			pins for PTP FRT MM...
+			****************************/
+			.o_data_recv(recv_data),
+			.o_data_valid(data_valid), 
+			.o_recv_addr(recv_addr),
+			.i_csme_en(csme_en),
+			.i_initDn(initDn),
+			
+			.i_main_clock_lost(main_clock_lost),
+			.i_main_clock_state(main_clock_state),
+			.i_start_en(start_en)
+);
+
+
+phy_init phy_init(
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			.o_initDn(initDn),
+			.b_mdio(b_mdio),
+			.o_mdc(o_mdc),
+			.o_phy_clk0(o_phy_clk0),
+			.o_phy_clk1(o_phy_clk1),			
+			.o_rst_phy0_n(o_rst_phy0_n),
+		   .o_rst_phy1_n(o_rst_phy1_n)			
+);
+
+
+
+
+
+	dim dmi_top(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		
+		.i_Rx_dv_A(i_Rx_dv_A),
+		.i_recv_data_A(i_recv_data_A),
+		
+		.o_Tx_en_A(o_Tx_en_A),
+		.o_send_data_A(o_send_data_A),
+		
+//		.i_Rx_dv_B(i_Rx_dv_B),
+//		.i_recv_data_B(i_recv_data_B),
+//		
+//		.o_Tx_en_B(o_Tx_en_B),
+//		.o_send_data_B(o_send_data_B),
+
+//		.i_Rx_dv_C(i_Rx_dv_C),
+//		.i_recv_data_C(i_recv_data_C),
+//		
+//		.o_Tx_en_C(o_Tx_en_C),
+//		.o_send_data_C(o_send_data_C),
+
+		.i_Rx_dv_host(EtxEn),
+		.i_recv_data_host(data_send),
+		
+		.o_Tx_en_host(ErxDv),
+		.o_send_data_host(data_recv),	
+		
+		
+		.o_get_time_en_frt0_s(get_time_en_frt0_s),  // frt0 time stamp
+		.o_get_time_en_sync_s(get_time_en_sync_s), // sync time stamp
+		.o_send_recvn_s(send_recvn_s),	//receive or send
+		
+		.o_get_time_en_frt0_m(get_time_en_frt0_m),  // frt0 time stamp
+		.o_get_time_en_sync_m(get_time_en_sync_m), // sync time stamp
+		.o_send_recvn_m(send_recvn_m),	//receive or send
+		
+		.for_test_frt0(o_get_time_en_frt0),//for test
+		.i_main_clock_state(main_clock_state)
+);
+
+wire opc_pkg_trig;
+
+
+opc_top  opc_top1(
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			.i_macrocycle_b(macrocycle_b),
+
+			//cpu
+			.o_addr_cpu(addr_cpu),
+			.b_data_cpu(data_cpu),
+			//.o_dpram_data(o_dpram_data),
+			
+			.i_rd_wr_cpu(rd_wr_cpu),
+			
+			.i_oe_cpu(oe_cpu),
+			.o_cpu_cs(cpu_cs),//low active
+ 			.o_busy_cpu(busy_cpu),//low active
+			.i_opc_pkg_trig(opc_pkg_trig),
+			
+ /****************************************/
+  /*interface for mac send */
+  /***************************************/			
+			
+			.o_send_data(send_data_c),
+			.i_send_addr(send_addr_c),
+			
+			.o_SendIrq_opc(SendIrq_opc),
+			
+			.o_length_c(lenth_c),
+			
+ /****************************************/
+  /*interface for mac recv */
+  /***************************************/				
+			.i_recv_data(recv_data_c),
+			.i_data_valid(data_valid_c),
+			.i_recv_addr(recv_addr_c),
+			
+			.i_local_node_ip(local_node_ip),
+			.i_local_node_mac(local_node_mac) 					
+);
+
+
+
+
+ether_mac ether_mac2(
+			/**************
+			common pin
+			*************/
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			/***********************
+			pins for data_bus
+			***********************/
+			.i_SendIrq(SendIrq_opc),
+			.i_data_send(send_data_c),
+			.i_lenth(lenth_c),
+			.o_data_addr(send_addr_c),
+//			.o_renew_pkg(mac_nxt_pkg1),
+			/***********************
+			pins for DMI
+			***********************/ 
+			.i_ErxDv(i_Rx_dv_B),
+			.i_data_recv(i_recv_data_B),
+			.o_EtxEn(o_Tx_en_B),
+			.o_data_send(o_send_data_B),
+			/***************************
+			pins for PTP FRT MM...
+			****************************/
+			.o_data_recv(recv_data_c),
+			.o_data_valid(data_valid_c), 
+			.o_recv_addr(recv_addr_c),
+			.i_csme_en(csme_en),
+			.i_initDn(initDn),
+			.i_main_clock_lost(1'b0),
+			.i_main_clock_state(1'b1),
+			.i_start_en(1'b0)
+);
+
+
+
+
+
+ arp_top arp_top(
+		//Global signal
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),	
+		//MII
+		.i_recv_data(recv_data),//data signal for receiving
+		.i_data_valid(data_valid),//data valid if high
+		.i_recv_addr(recv_addr),//receive addr when receiving	
+		
+		.i_local_ip(local_node_ip),
+		.i_local_mac(local_node_mac),
+	
+		 .i_read_addr(arp_rd_addr),	
+		 .i_next_pkg(arp_nxt_pkg),	 
+		 .o_arp_send_irq(arp_irq),
+		 .o_data(arp_data),
+		 .o_len(arp_len)	 	
+);
+
+
+
+
+
+
+
+
+pll pll (
+.inclk0(i_clk_50),
+.c0(clk_100)
+);
+
+
+
+
+ led_display  led_display(
+			.i_clk(i_clk),
+			.i_rst_n(i_rst_n),
+			.i_work_rdt(device_work_rdt),
+			.i_dpram_valid(dpram_valid),
+			.i_csme_en(csme_en),
+			.i_cpu_err(cpu_err),
+			.LED_RUN(o_led_run),
+			.LED_ERR(o_led_err),
+			.LED_RDT(o_led_rdt)
+);
+endmodule 
